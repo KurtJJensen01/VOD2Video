@@ -1,34 +1,6 @@
 #!/usr/bin/env python3
-"""Export fixed-length VOD segments plus a labeling CSV.
-
-Usage:
-    python tools/export_labeling_segments.py \
-        --input /path/to/vod.mp4 \
-        --output-dir /path/to/output \
-        --segment-length 5
-
-What it does:
-- Reads the input VOD duration using ffprobe
-- Cuts the VOD into fixed-length review clips
-- Writes clips into an output folder
-- Creates labels.csv so the team can mark each clip as highlight or non-highlight
-
-CSV columns:
-- segment_id
-- clip_name
-- clip_path
-- start_time_seconds
-- end_time_seconds
-- start_time_hhmmss
-- end_time_hhmmss
-- label
-- notes
-
-Label values:
-- 1 = highlight
-- 0 = non-highlight
-- blank = not reviewed yet
-"""
+"""Export fixed-length VOD segments plus a labeling CSV, preserving audio."""
+# python tools/getTrainingSet.py --input "VIDEO FILE PATH" --output-dir "./labeling_test" --segment-length 5 --limit 20 (LIMIT IS OPTIONAL)
 
 from __future__ import annotations
 
@@ -106,7 +78,6 @@ def export_segment(
         str(input_video),
         "-t",
         f"{clip_duration:.3f}",
-        "-an",
     ]
 
     filters: list[str] = []
@@ -126,6 +97,10 @@ def export_segment(
         "28",
         "-pix_fmt",
         "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
         str(output_clip),
     ])
 
