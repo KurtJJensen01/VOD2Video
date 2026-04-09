@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Export fixed-length VOD segments plus a labeling CSV, preserving audio."""
-# python tools/build_labeling_dataset.py --input "VIDEO FILE PATH" --output-dir "./labeling_test" --segment-length 5 --limit 20 (LIMIT IS OPTIONAL)
+# python tools/build_labeling_dataset.py --input "VIDEO FILE PATH" --output-dir "./labeling_test" --segment-length 5 --limit 500 --seed 42
 
 from __future__ import annotations
 
