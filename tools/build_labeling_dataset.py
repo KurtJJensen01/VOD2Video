@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Export fixed-length VOD segments plus a labeling CSV, preserving audio."""
-# python tools/getTrainingSet.py --input "VIDEO FILE PATH" --output-dir "./labeling_test" --segment-length 5 --limit 20 (LIMIT IS OPTIONAL)
+# python tools/build_labeling_dataset.py --input "VIDEO FILE PATH" --output-dir "./labeling_test" --segment-length 5 --limit 20 (LIMIT IS OPTIONAL)
 
 from __future__ import annotations
 
+import random
 import argparse
 import csv
 import math
@@ -138,6 +139,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=360, help="Output clip height for review clips (default: 360)")
     parser.add_argument("--fps", type=int, default=12, help="Output FPS for review clips (default: 12)")
     parser.add_argument("--limit", type=int, default=None, help="Optional max number of segments to export")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for clip sampling (default: 42)")
     return parser.parse_args()
 
 
@@ -166,8 +168,15 @@ def main() -> int:
 
     rows: list[dict[str, str]] = []
     segments = list(build_segments(duration_seconds, args.segment_length))
+
     if args.limit is not None:
-        segments = segments[: args.limit]
+        if args.limit <= 0:
+            print("--limit must be greater than 0", file=sys.stderr)
+            return 1
+
+        if args.limit < len(segments):
+            rng = random.Random(args.seed)
+            segments = sorted(rng.sample(segments, args.limit), key=lambda x: x[0])
 
     total_segments = len(segments)
     print(f"Exporting {total_segments} segment(s) to: {clips_dir}")
