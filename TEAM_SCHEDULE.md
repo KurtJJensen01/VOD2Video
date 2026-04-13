@@ -48,7 +48,7 @@ A stable dataset format and stable project scope.
 # Phase 1 — Shared Foundation
 This is the first real build phase. These tasks should be done immediately because many later tasks depend on them.
 
-## Branch 1A — Dataset Loader
+## Branch 1A — Dataset Loader — Kurt
 ### Dependency
 Phase 0 complete
 
