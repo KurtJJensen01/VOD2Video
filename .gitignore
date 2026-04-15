@@ -5,3 +5,4 @@ clips
 __pycache__/
 *.py[cod]
 artifacts/splits/
+artifacts/training/

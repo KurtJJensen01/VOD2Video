@@ -134,6 +134,12 @@ To regenerate split manifests locally, run:
 python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
 ```
 
+To verify the Branch 2B training framework locally, run:
+
+```bash
+python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+```
+
 --- 
 
 ## Notes
