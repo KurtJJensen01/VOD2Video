@@ -126,7 +126,7 @@ Model training cannot start until this is working.
 
 ---
 
-## Branch 2B — Training Framework
+## Branch 2B — Training Framework — Kurt
 ### Dependency
 Branch 1A and 1C complete
 
