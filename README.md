@@ -124,6 +124,18 @@ The output score can then be used to rank clips and support final recap generati
 
 ---
 
+## Generated Artifacts
+
+Some files under `artifacts/` are generated outputs and do not need to be committed.
+
+To regenerate split manifests locally, run:
+
+```bash
+python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
+```
+
+--- 
+
 ## Notes
 
 - This project is focused on **long-form recap generation**, not Shorts generation.
