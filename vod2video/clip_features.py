@@ -1,17 +1,14 @@
 """Clip-content feature extraction for Phase 2A.
 
 This module builds a training-ready feature manifest from the Phase 1C split
-output by reading the actual clip files and summarizing simple visual signals.
-The first version stays intentionally lightweight:
+output by reading the actual clip files and summarizing both visual and audio
+signals from the clips themselves.
 
-- low-rate frame sampling from each clip
-- brightness and contrast summaries
-- frame-to-frame difference summaries as a motion proxy
-- clip header metadata read from the video container
-
-Audio extraction is kept as a future extension point. The current local
-environment can decode MP4 video frames with OpenCV, but it does not expose an
-MP4-capable audio decoder.
+Visual features are extracted with OpenCV from low-rate sampled frames.
+Audio features are extracted with ffmpeg by decoding the first audio stream to
+mono PCM samples, then computing lightweight summary statistics. If ffmpeg is
+not available, the pipeline continues in visual-only mode and emits documented
+audio fallback values.
 """
 
 from __future__ import annotations
@@ -19,6 +16,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import shutil
+import subprocess
 from typing import Iterable
 
 import cv2
@@ -53,6 +52,19 @@ DEFAULT_FEATURE_COLUMNS = (
     "motion_std",
     "motion_max",
     "motion_p90",
+    "audio_available",
+    "audio_duration_seconds",
+    "audio_sample_rate",
+    "audio_rms_mean",
+    "audio_rms_std",
+    "audio_peak_amplitude",
+    "audio_mean_amplitude",
+    "audio_std_amplitude",
+    "audio_silence_ratio",
+    "audio_energy_mean",
+    "audio_energy_std",
+    "audio_energy_max",
+    "audio_energy_p90",
 )
 
 
@@ -71,6 +83,28 @@ class ClipSamplingConfig:
 
 
 @dataclass(frozen=True)
+class AudioExtractionConfig:
+    """How audio is decoded and summarized before feature computation."""
+
+    enabled: bool = True
+    target_sample_rate: int = 16000
+    window_size_samples: int = 2048
+    silence_threshold: float = 0.02
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
+
+
+@dataclass(frozen=True)
+class AudioToolStatus:
+    """Resolved audio tool paths and whether audio extraction is available."""
+
+    ffmpeg_path: str | None
+    ffprobe_path: str | None
+    audio_enabled: bool
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
 class FeatureManifestSummary:
     total_rows: int
     extracted_rows: int
@@ -78,6 +112,7 @@ class FeatureManifestSummary:
     split_counts: dict[str, int]
     label_counts: dict[int, int]
     sampling: dict[str, float | int]
+    audio: dict[str, object]
 
 
 def load_feature_source_manifest(path: Path) -> pd.DataFrame:
@@ -105,6 +140,218 @@ def _safe_float(value: float | int | None, *, default: float = 0.0) -> float:
     if not np.isfinite(numeric):
         return default
     return numeric
+
+
+def _resolve_tool_path(configured_path: str | None, tool_name: str) -> str | None:
+    if configured_path:
+        candidate = Path(configured_path).expanduser()
+        if candidate.exists():
+            return str(candidate.resolve())
+        return None
+    return shutil.which(tool_name)
+
+
+def resolve_audio_tool_status(
+    config: AudioExtractionConfig | None = None,
+) -> AudioToolStatus:
+    active_config = config or AudioExtractionConfig()
+    if not active_config.enabled:
+        return AudioToolStatus(
+            ffmpeg_path=None,
+            ffprobe_path=None,
+            audio_enabled=False,
+            warning="Audio extraction disabled by configuration.",
+        )
+
+    ffmpeg_path = _resolve_tool_path(active_config.ffmpeg_path, "ffmpeg")
+    ffprobe_path = _resolve_tool_path(active_config.ffprobe_path, "ffprobe")
+    if ffmpeg_path is None:
+        return AudioToolStatus(
+            ffmpeg_path=None,
+            ffprobe_path=ffprobe_path,
+            audio_enabled=False,
+            warning=(
+                "ffmpeg was not found on PATH and no explicit --ffmpeg-path was provided. "
+                "Continuing with visual-only features and audio fallback columns."
+            ),
+        )
+
+    if ffprobe_path is None:
+        return AudioToolStatus(
+            ffmpeg_path=ffmpeg_path,
+            ffprobe_path=None,
+            audio_enabled=True,
+            warning=(
+                "ffprobe was not found. Audio decoding will still run via ffmpeg, "
+                "but preflight stream checks are unavailable."
+            ),
+        )
+
+    return AudioToolStatus(
+        ffmpeg_path=ffmpeg_path,
+        ffprobe_path=ffprobe_path,
+        audio_enabled=True,
+        warning=None,
+    )
+
+
+def make_audio_fallback_features(*, audio_available: bool = False) -> dict[str, float]:
+    return {
+        "audio_available": float(1.0 if audio_available else 0.0),
+        "audio_duration_seconds": 0.0,
+        "audio_sample_rate": 0.0,
+        "audio_rms_mean": 0.0,
+        "audio_rms_std": 0.0,
+        "audio_peak_amplitude": 0.0,
+        "audio_mean_amplitude": 0.0,
+        "audio_std_amplitude": 0.0,
+        "audio_silence_ratio": 1.0,
+        "audio_energy_mean": 0.0,
+        "audio_energy_std": 0.0,
+        "audio_energy_max": 0.0,
+        "audio_energy_p90": 0.0,
+    }
+
+
+def _probe_has_audio_stream(clip_path: Path, tool_status: AudioToolStatus) -> bool | None:
+    if tool_status.ffprobe_path is None:
+        return None
+
+    command = [
+        tool_status.ffprobe_path,
+        "-v",
+        "error",
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=codec_type",
+        "-of",
+        "json",
+        str(clip_path),
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        return None
+
+    streams = payload.get("streams", [])
+    return bool(streams)
+
+
+def _decode_audio_samples(
+    clip_path: Path,
+    config: AudioExtractionConfig,
+    tool_status: AudioToolStatus,
+) -> tuple[np.ndarray, int]:
+    if tool_status.ffmpeg_path is None:
+        raise ClipFeatureExtractionError("ffmpeg is required for audio decoding.")
+
+    command = [
+        tool_status.ffmpeg_path,
+        "-v",
+        "error",
+        "-i",
+        str(clip_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        str(config.target_sample_rate),
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "-",
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr_text = result.stderr.decode("utf-8", errors="replace").strip()
+        raise ClipFeatureExtractionError(
+            f"ffmpeg audio decode failed for {clip_path.name}: {stderr_text or 'unknown error'}"
+        )
+
+    sample_buffer = result.stdout
+    if not sample_buffer:
+        return np.array([], dtype=np.float32), config.target_sample_rate
+
+    samples = np.frombuffer(sample_buffer, dtype=np.int16).astype(np.float32)
+    if samples.size == 0:
+        return np.array([], dtype=np.float32), config.target_sample_rate
+
+    samples /= 32768.0
+    return samples, config.target_sample_rate
+
+
+def _window_audio(samples: np.ndarray, window_size: int) -> np.ndarray:
+    if samples.size == 0:
+        return np.zeros((0, window_size), dtype=np.float32)
+
+    usable_samples = samples.size - (samples.size % window_size)
+    if usable_samples == 0:
+        return samples.reshape(1, -1)
+
+    trimmed = samples[:usable_samples]
+    return trimmed.reshape(-1, window_size)
+
+
+def extract_audio_features(
+    clip_path: Path,
+    *,
+    audio_config: AudioExtractionConfig | None = None,
+    tool_status: AudioToolStatus | None = None,
+) -> dict[str, float]:
+    """Extract simple audio summary features from a clip on disk."""
+
+    active_config = audio_config or AudioExtractionConfig()
+    active_status = tool_status or resolve_audio_tool_status(active_config)
+    if not active_status.audio_enabled:
+        return make_audio_fallback_features(audio_available=False)
+
+    has_audio_stream = _probe_has_audio_stream(clip_path, active_status)
+    if has_audio_stream is False:
+        return make_audio_fallback_features(audio_available=False)
+
+    try:
+        samples, sample_rate = _decode_audio_samples(clip_path, active_config, active_status)
+    except ClipFeatureExtractionError:
+        return make_audio_fallback_features(audio_available=False)
+    if samples.size == 0:
+        return make_audio_fallback_features(audio_available=False)
+
+    absolute_amplitude = np.abs(samples)
+    windows = _window_audio(samples, max(1, active_config.window_size_samples))
+    rms_windows = np.sqrt(np.mean(np.square(windows), axis=1)) if len(windows) else np.zeros(1, dtype=np.float32)
+    energy_windows = np.mean(np.square(windows), axis=1) if len(windows) else np.zeros(1, dtype=np.float32)
+    silence_ratio = float(np.mean(absolute_amplitude < active_config.silence_threshold))
+
+    return {
+        "audio_available": 1.0,
+        "audio_duration_seconds": float(samples.size / max(sample_rate, 1)),
+        "audio_sample_rate": float(sample_rate),
+        "audio_rms_mean": float(rms_windows.mean()),
+        "audio_rms_std": float(rms_windows.std()),
+        "audio_peak_amplitude": float(absolute_amplitude.max()),
+        "audio_mean_amplitude": float(absolute_amplitude.mean()),
+        "audio_std_amplitude": float(absolute_amplitude.std()),
+        "audio_silence_ratio": silence_ratio,
+        "audio_energy_mean": float(energy_windows.mean()),
+        "audio_energy_std": float(energy_windows.std()),
+        "audio_energy_max": float(energy_windows.max()),
+        "audio_energy_p90": float(np.percentile(energy_windows, 90)),
+    }
 
 
 def _compute_sample_indices(
@@ -218,6 +465,8 @@ def extract_clip_features(
     row: pd.Series,
     *,
     sampling_config: ClipSamplingConfig | None = None,
+    audio_config: AudioExtractionConfig | None = None,
+    audio_tool_status: AudioToolStatus | None = None,
 ) -> dict[str, object]:
     """Extract a feature row while preserving the manifest identity columns."""
 
@@ -227,24 +476,37 @@ def extract_clip_features(
 
     base = {column: row[column] for column in row.index if column in DEFAULT_ID_COLUMNS}
     visual_features = extract_visual_features(clip_path, sampling_config=sampling_config)
-    return {**base, **visual_features}
+    audio_features = extract_audio_features(
+        clip_path,
+        audio_config=audio_config,
+        tool_status=audio_tool_status,
+    )
+    return {**base, **visual_features, **audio_features}
 
 
 def build_feature_manifest(
     dataframe: pd.DataFrame,
     *,
     sampling_config: ClipSamplingConfig | None = None,
+    audio_config: AudioExtractionConfig | None = None,
     include_optional_columns: Iterable[str] = (),
 ) -> pd.DataFrame:
     """Build one training-ready feature dataframe from a split manifest."""
 
     config = sampling_config or ClipSamplingConfig()
+    active_audio_config = audio_config or AudioExtractionConfig()
+    audio_tool_status = resolve_audio_tool_status(active_audio_config)
     output_rows: list[dict[str, object]] = []
     optional_columns = tuple(include_optional_columns)
 
     for row in dataframe.itertuples(index=False):
         row_series = pd.Series(row._asdict())
-        feature_row = extract_clip_features(row_series, sampling_config=config)
+        feature_row = extract_clip_features(
+            row_series,
+            sampling_config=config,
+            audio_config=active_audio_config,
+            audio_tool_status=audio_tool_status,
+        )
         for column in optional_columns:
             if column in row_series.index and column not in feature_row:
                 feature_row[column] = row_series[column]
@@ -273,7 +535,14 @@ def build_feature_manifest_summary(
     dataframe: pd.DataFrame,
     *,
     sampling_config: ClipSamplingConfig,
+    audio_config: AudioExtractionConfig,
+    audio_tool_status: AudioToolStatus,
 ) -> FeatureManifestSummary:
+    audio_available_rows = (
+        int(pd.to_numeric(dataframe["audio_available"], errors="coerce").sum())
+        if "audio_available" in dataframe.columns
+        else 0
+    )
     split_counts = (
         dataframe["split"].value_counts(sort=False).astype(int).to_dict()
         if "split" in dataframe.columns
@@ -294,6 +563,18 @@ def build_feature_manifest_summary(
         split_counts={str(key): int(value) for key, value in split_counts.items()},
         label_counts={int(key): int(value) for key, value in label_counts.items()},
         sampling=asdict(sampling_config),
+        audio={
+            "enabled": bool(audio_config.enabled),
+            "ffmpeg_path": audio_tool_status.ffmpeg_path,
+            "ffprobe_path": audio_tool_status.ffprobe_path,
+            "audio_tool_enabled": bool(audio_tool_status.audio_enabled),
+            "warning": audio_tool_status.warning,
+            "audio_available_rows": audio_available_rows,
+            "audio_unavailable_rows": int(len(dataframe) - audio_available_rows),
+            "target_sample_rate": int(audio_config.target_sample_rate),
+            "window_size_samples": int(audio_config.window_size_samples),
+            "silence_threshold": float(audio_config.silence_threshold),
+        },
     )
 
 
@@ -316,4 +597,3 @@ def write_feature_manifest_outputs(
         encoding="utf-8",
     )
     return paths
-
