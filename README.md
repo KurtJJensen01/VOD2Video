@@ -146,6 +146,13 @@ To build the Branch 2A real feature manifest from actual clip contents, run:
 python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
 ```
 
+If `ffmpeg` is not on PATH, you can pass explicit tool paths and the extractor
+will otherwise fall back to visual-only features with documented audio columns:
+
+```bash
+python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
+```
+
 --- 
 
 ## Notes
