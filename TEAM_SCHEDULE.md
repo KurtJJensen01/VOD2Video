@@ -80,7 +80,7 @@ A clean shared structure so later code does not get scattered.
 
 ---
 
-## Branch 1C — Train/Val/Test Split Plan
+## Branch 1C — Train/Val/Test Split Plan — Kurt
 ### Dependency
 Phase 0 complete
 
