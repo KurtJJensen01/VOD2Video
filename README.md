@@ -140,6 +140,12 @@ To verify the Branch 2B training framework locally, run:
 python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
 ```
 
+To build the Branch 2A real feature manifest from actual clip contents, run:
+
+```bash
+python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+```
+
 --- 
 
 ## Notes
