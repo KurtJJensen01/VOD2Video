@@ -230,7 +230,7 @@ Improved feature set.
 
 ---
 
-## Branch 4B — Model Improvement
+## Branch 4B — Model Improvement — Kurt
 ### Dependency
 First end-to-end training run complete
 
