@@ -136,6 +136,7 @@ def main() -> int:
         optimizer=optimizer,
         training_config=training_config,
         feature_names=list(bundle.feature_names),
+        normalization_stats=bundle.normalization_stats,
     )
 
     model_for_test = build_model(model_config)
