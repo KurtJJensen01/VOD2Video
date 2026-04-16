@@ -153,6 +153,13 @@ will otherwise fall back to visual-only features with documented audio columns:
 python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
 ```
 
+To score a Phase 2A feature manifest with a trained Phase 2B checkpoint and
+write ranked Branch 2C demo outputs, run:
+
+```bash
+python tools/score_feature_manifest.py --checkpoint artifacts/training/branch_2b_real_feature_audio_smoke/best_model.pt --feature-manifest artifacts/features/branch_2a/clip_features.csv
+```
+
 --- 
 
 ## Notes

@@ -36,6 +36,16 @@ from .dataset_split import (
 )
 from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics
 from .models import MLPBaselineModel, build_model
+from .inference import (
+    InferenceError,
+    InferenceSummary,
+    LoadedInferenceCheckpoint,
+    build_prediction_dataframe,
+    load_feature_manifest_for_inference,
+    load_inference_checkpoint,
+    score_feature_manifest,
+    write_inference_outputs,
+)
 from .training import train_model, train_one_epoch, validate_model
 from .training_config import CheckpointConfig, DataConfig, ModelConfig, TrainingConfig
 from .training_data import (
@@ -65,7 +75,10 @@ __all__ = [
     "DatasetSplitError",
     "LabeledDatasetSource",
     "FeatureManifestSummary",
+    "InferenceError",
+    "InferenceSummary",
     "LoadedDataset",
+    "LoadedInferenceCheckpoint",
     "MLPBaselineModel",
     "ModelConfig",
     "SplitConfig",
@@ -74,6 +87,7 @@ __all__ = [
     "TrainingConfig",
     "TrainingDataError",
     "build_dataloaders_from_manifest",
+    "build_prediction_dataframe",
     "build_feature_manifest",
     "build_feature_manifest_summary",
     "build_model",
@@ -85,14 +99,18 @@ __all__ = [
     "format_split_summaries",
     "load_labeled_dataset",
     "load_feature_source_manifest",
+    "load_feature_manifest_for_inference",
+    "load_inference_checkpoint",
     "load_split_manifest",
     "prepare_training_manifest",
+    "score_feature_manifest",
     "split_labeled_dataset",
     "make_audio_fallback_features",
     "resolve_audio_tool_status",
     "train_model",
     "train_one_epoch",
     "validate_model",
+    "write_inference_outputs",
     "write_feature_manifest_outputs",
     "write_split_manifests",
 ]
