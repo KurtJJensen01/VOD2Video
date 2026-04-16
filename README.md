@@ -194,6 +194,13 @@ audio-only, metadata-only, and combined feature subsets, run:
 python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
 ```
 
+To run the Branch 4B model improvement workflow and compare a small set of
+practical training/model variants on the best current feature setup, run:
+
+```bash
+python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
+```
+
 --- 
 
 ## Notes
