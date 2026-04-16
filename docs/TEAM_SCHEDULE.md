@@ -182,7 +182,7 @@ First trained model and first metrics.
 
 ---
 
-## Branch 3B — Prediction Review Pipeline
+## Branch 3B — Prediction Review Pipeline — Kurt
 ### Dependency
 Branch 2C complete and a first trained model exists
 
