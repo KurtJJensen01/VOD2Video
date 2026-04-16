@@ -187,6 +187,13 @@ comparison artifacts, and simple charts from the saved 3A/3B outputs, run:
 python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
 ```
 
+To run the Branch 4A feature improvement workflow and compare visual-only,
+audio-only, metadata-only, and combined feature subsets, run:
+
+```bash
+python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
+```
+
 --- 
 
 ## Notes
