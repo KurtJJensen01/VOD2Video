@@ -160,6 +160,13 @@ write ranked Branch 2C demo outputs, run:
 python tools/score_feature_manifest.py --checkpoint artifacts/training/branch_2b_real_feature_audio_smoke/best_model.pt --feature-manifest artifacts/features/branch_2a/clip_features.csv
 ```
 
+To run the first real end-to-end baseline training workflow for Branch 3A and
+write a presentation-friendly metrics summary, run:
+
+```bash
+python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
+```
+
 --- 
 
 ## Notes
