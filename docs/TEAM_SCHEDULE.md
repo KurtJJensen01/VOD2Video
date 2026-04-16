@@ -167,7 +167,7 @@ An inference/demo framework that can later plug in the trained model.
 
 # Phase 3 — Second Layer Dependencies
 
-## Branch 3A — First End-to-End Training Run
+## Branch 3A — First End-to-End Training Run — Kurt
 ### Dependency
 Branch 2A and Branch 2B complete
 
