@@ -146,7 +146,7 @@ A training framework ready to plug the features into.
 
 ---
 
-## Branch 2C — Inference / Demo Framework
+## Branch 2C — Inference / Demo Framework — Kurt
 ### Dependency
 Branch 1A complete
 
