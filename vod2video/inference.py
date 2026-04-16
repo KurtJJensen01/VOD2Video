@@ -145,7 +145,7 @@ def load_feature_manifest_for_inference(path: Path) -> pd.DataFrame:
     return pd.read_csv(resolved_path)
 
 
-def _prepare_feature_frame(
+def prepare_feature_frame_for_inference(
     dataframe: pd.DataFrame,
     *,
     feature_names: tuple[str, ...],
@@ -278,7 +278,7 @@ def score_feature_manifest(
         threshold=threshold,
     )
     feature_manifest = load_feature_manifest_for_inference(feature_manifest_path)
-    prepared_features, normalization_applied, normalization_source = _prepare_feature_frame(
+    prepared_features, normalization_applied, normalization_source = prepare_feature_frame_for_inference(
         feature_manifest,
         feature_names=checkpoint.feature_names,
         normalization_stats=checkpoint.normalization_stats,
