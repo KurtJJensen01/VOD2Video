@@ -8,3 +8,4 @@ artifacts/splits/
 artifacts/training/
 artifacts/features/
 artifacts/inference/
+artifacts/review/

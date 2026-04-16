@@ -46,6 +46,16 @@ from .inference import (
     score_feature_manifest,
     write_inference_outputs,
 )
+from .prediction_review import (
+    PredictionReviewError,
+    PredictionReviewSummary,
+    build_prediction_review_summary,
+    load_prediction_review_csv,
+    merge_review_labels,
+    prepare_predictions_for_review,
+    review_prediction_csv,
+    write_prediction_review_outputs,
+)
 from .training import train_model, train_one_epoch, validate_model
 from .training_config import CheckpointConfig, DataConfig, ModelConfig, TrainingConfig
 from .training_data import (
@@ -81,6 +91,8 @@ __all__ = [
     "LoadedInferenceCheckpoint",
     "MLPBaselineModel",
     "ModelConfig",
+    "PredictionReviewError",
+    "PredictionReviewSummary",
     "SplitConfig",
     "SplitManifestDataset",
     "SplitSummary",
@@ -100,9 +112,14 @@ __all__ = [
     "load_labeled_dataset",
     "load_feature_source_manifest",
     "load_feature_manifest_for_inference",
+    "load_prediction_review_csv",
     "load_inference_checkpoint",
     "load_split_manifest",
+    "merge_review_labels",
     "prepare_training_manifest",
+    "prepare_predictions_for_review",
+    "build_prediction_review_summary",
+    "review_prediction_csv",
     "score_feature_manifest",
     "split_labeled_dataset",
     "make_audio_fallback_features",
@@ -111,6 +128,7 @@ __all__ = [
     "train_one_epoch",
     "validate_model",
     "write_inference_outputs",
+    "write_prediction_review_outputs",
     "write_feature_manifest_outputs",
     "write_split_manifests",
 ]
