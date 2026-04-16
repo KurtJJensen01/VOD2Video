@@ -245,7 +245,7 @@ Final model choice.
 
 ---
 
-## Branch 4C — Demo Example Selection
+## Branch 4C — Demo Example Selection — Kurt
 ### Dependency
 Prediction review pipeline complete
 
