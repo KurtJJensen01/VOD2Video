@@ -180,6 +180,13 @@ If the prediction CSV is unlabeled, you can merge labels from a separate CSV:
 python tools/review_predictions.py --prediction-csv artifacts/inference/branch_2c/scored_clips.csv --labels-csv artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/review/branch_3b
 ```
 
+To generate Branch 3C presentation-ready confusion matrices, metric tables,
+comparison artifacts, and simple charts from the saved 3A/3B outputs, run:
+
+```bash
+python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
+```
+
 --- 
 
 ## Notes
