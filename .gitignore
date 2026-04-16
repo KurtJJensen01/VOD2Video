@@ -4,3 +4,6 @@ clips
 *.7z
 __pycache__/
 *.py[cod]
+artifacts/splits/
+artifacts/training/
+artifacts/features/

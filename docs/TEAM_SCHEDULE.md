@@ -101,7 +101,7 @@ A repeatable split strategy.
 
 # Phase 2 — Parallel Branches
 
-## Branch 2A — Feature Pipeline
+## Branch 2A — Feature Pipeline — Kurt
 ### Dependency
 Branch 1A complete
 
@@ -126,7 +126,7 @@ Model training cannot start until this is working.
 
 ---
 
-## Branch 2B — Training Framework
+## Branch 2B — Training Framework — Kurt
 ### Dependency
 Branch 1A and 1C complete
 

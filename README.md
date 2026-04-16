@@ -124,6 +124,37 @@ The output score can then be used to rank clips and support final recap generati
 
 ---
 
+## Generated Artifacts
+
+Some files under `artifacts/` are generated outputs and do not need to be committed.
+
+To regenerate split manifests locally, run:
+
+```bash
+python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
+```
+
+To verify the Branch 2B training framework locally, run:
+
+```bash
+python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+```
+
+To build the Branch 2A real feature manifest from actual clip contents, run:
+
+```bash
+python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+```
+
+If `ffmpeg` is not on PATH, you can pass explicit tool paths and the extractor
+will otherwise fall back to visual-only features with documented audio columns:
+
+```bash
+python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
+```
+
+--- 
+
 ## Notes
 
 - This project is focused on **long-form recap generation**, not Shorts generation.

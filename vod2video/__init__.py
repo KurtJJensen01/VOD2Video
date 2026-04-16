@@ -1,5 +1,22 @@
 """Reusable helpers for the VOD2Video project."""
 
+from .clip_features import (
+    AudioExtractionConfig,
+    AudioToolStatus,
+    DEFAULT_FEATURE_COLUMNS,
+    ClipFeatureExtractionError,
+    ClipSamplingConfig,
+    FeatureManifestSummary,
+    build_feature_manifest,
+    build_feature_manifest_summary,
+    extract_clip_features,
+    extract_audio_features,
+    extract_visual_features,
+    load_feature_source_manifest,
+    make_audio_fallback_features,
+    resolve_audio_tool_status,
+    write_feature_manifest_outputs,
+)
 from .dataset_loader import (
     DatasetSummary,
     DatasetValidationError,
@@ -8,12 +25,74 @@ from .dataset_loader import (
     format_summary,
     load_labeled_dataset,
 )
+from .dataset_split import (
+    DatasetSplit,
+    DatasetSplitError,
+    SplitConfig,
+    SplitSummary,
+    format_split_summaries,
+    split_labeled_dataset,
+    write_split_manifests,
+)
+from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics
+from .models import MLPBaselineModel, build_model
+from .training import train_model, train_one_epoch, validate_model
+from .training_config import CheckpointConfig, DataConfig, ModelConfig, TrainingConfig
+from .training_data import (
+    DEFAULT_FEATURE_NAMES,
+    DatasetBundle,
+    SplitManifestDataset,
+    TrainingDataError,
+    build_dataloaders_from_manifest,
+    load_split_manifest,
+    prepare_training_manifest,
+)
 
 __all__ = [
+    "BinaryClassificationMetrics",
+    "AudioExtractionConfig",
+    "AudioToolStatus",
+    "CheckpointConfig",
+    "ClipFeatureExtractionError",
+    "ClipSamplingConfig",
+    "DEFAULT_FEATURE_NAMES",
+    "DEFAULT_FEATURE_COLUMNS",
+    "DataConfig",
+    "DatasetBundle",
     "DatasetSummary",
     "DatasetValidationError",
+    "DatasetSplit",
+    "DatasetSplitError",
     "LabeledDatasetSource",
+    "FeatureManifestSummary",
     "LoadedDataset",
+    "MLPBaselineModel",
+    "ModelConfig",
+    "SplitConfig",
+    "SplitManifestDataset",
+    "SplitSummary",
+    "TrainingConfig",
+    "TrainingDataError",
+    "build_dataloaders_from_manifest",
+    "build_feature_manifest",
+    "build_feature_manifest_summary",
+    "build_model",
+    "compute_binary_classification_metrics",
+    "extract_audio_features",
+    "extract_clip_features",
+    "extract_visual_features",
     "format_summary",
+    "format_split_summaries",
     "load_labeled_dataset",
+    "load_feature_source_manifest",
+    "load_split_manifest",
+    "prepare_training_manifest",
+    "split_labeled_dataset",
+    "make_audio_fallback_features",
+    "resolve_audio_tool_status",
+    "train_model",
+    "train_one_epoch",
+    "validate_model",
+    "write_feature_manifest_outputs",
+    "write_split_manifests",
 ]
