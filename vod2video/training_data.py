@@ -37,11 +37,11 @@ class DatasetBundle:
 
 
 class SplitManifestDataset(Dataset):
-    """Simple tensor dataset built from split manifest metadata columns.
+    """Simple tensor dataset built from numeric manifest columns.
 
-    This placeholder dataset exists so Branch 2B can validate the training
-    stack before the real feature extraction pipeline lands. It exposes the
-    future model input contract as:
+    It supports both the original placeholder manifest-derived columns and
+    later precomputed real clip feature columns. It exposes the shared model
+    input contract as:
 
     - `features`: float tensor of shape `[feature_dim]`
     - `label`: float tensor scalar for BCE-style binary classification
@@ -104,7 +104,7 @@ def load_split_manifest(path: Path) -> pd.DataFrame:
 
 
 def prepare_training_manifest(dataframe: pd.DataFrame) -> pd.DataFrame:
-    """Derive lightweight numeric features from split metadata.
+    """Derive lightweight numeric placeholder features from split metadata.
 
     These fields are intentionally simple placeholders so the training
     framework can run before full frame/feature extraction exists.

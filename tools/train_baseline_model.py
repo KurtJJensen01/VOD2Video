@@ -31,13 +31,13 @@ from vod2video.training_data import (  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train a placeholder baseline model from a split manifest."
+        description="Train the baseline model from a split manifest or precomputed feature manifest."
     )
     parser.add_argument(
         "--split-manifest",
         type=Path,
         default=REPO_ROOT / "artifacts" / "splits" / "branch_1c" / "all_splits.csv",
-        help="Path to the combined split manifest CSV from Phase 1C.",
+        help="Path to a split manifest CSV or a precomputed feature manifest CSV.",
     )
     parser.add_argument(
         "--output-dir",
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
         "--feature-columns",
         nargs="+",
         default=list(DEFAULT_FEATURE_NAMES),
-        help="Manifest-derived numeric columns to feed into the placeholder baseline.",
+        help="Numeric feature columns to feed into the baseline model.",
     )
     return parser.parse_args()
 
