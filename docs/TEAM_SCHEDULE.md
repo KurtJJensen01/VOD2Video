@@ -322,7 +322,7 @@ Working new-VOD pipeline that turns one raw VOD into ranked highlight candidates
 Phase 6 complete
 
 ### Tasks
-- Select top highlight clips from ranked outputs
+- Apply clip-selection logic to ranked outputs
 - Remove weak or redundant clips if needed
 - Keep clips that best represent the final recap
 - Save selected clips for final video assembly
