@@ -201,6 +201,14 @@ practical training/model variants on the best current feature setup, run:
 python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
 ```
 
+To run the Branch 4C demo example selection workflow and generate ranked
+presentation-ready TP/FP/FN/highlight candidate lists from the current best
+Branch 4B experiment, run:
+
+```bash
+python tools/select_demo_examples.py --output-dir artifacts/demo_selection/branch_4c
+```
+
 --- 
 
 ## Notes
