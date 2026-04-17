@@ -217,7 +217,7 @@ Presentation-ready results visuals.
 
 ## Branch 4A — Feature Improvement — Kurt
 ### Dependency
-First end-to-end training run complete
+Branch 3A complete
 
 ### Tasks
 - Review mistakes
@@ -232,7 +232,7 @@ Improved feature set.
 
 ## Branch 4B — Model Improvement — Kurt
 ### Dependency
-First end-to-end training run complete
+Branch 3A complete
 
 ### Tasks
 - Tune one or two parameters only
@@ -247,7 +247,7 @@ Final model choice.
 
 ## Branch 4C — Demo Example Selection — Kurt
 ### Dependency
-Prediction review pipeline complete
+Branch 3B complete
 
 ### Tasks
 - Pick strongest correct predictions
@@ -260,145 +260,108 @@ A curated set of final demo examples.
 
 ---
 
-# Phase 5 — Final Integration
+# Phase 5 — Final Model Lock
 
 ## Branch 5A — Final Metrics Package
 ### Dependency
-Model improvement complete
+Branch 4B complete
 
 ### Tasks
+- Choose final feature setup
+- Choose final model configuration
+- Choose final checkpoint
+- Choose final decision threshold / selection logic
 - Save final metrics
 - Save confusion matrix
 - Save experiment comparison table
 - Write final observations
 
 ### Output
-Final technical results package.
+Final locked model and technical results package.
 
 ---
 
-## Branch 5B — Final Demo Package
+## Branch 5B — Final Demo Example Package
 ### Dependency
-Demo example selection complete
+Branch 4C complete
 
 ### Tasks
-- Organize prediction examples
-- Organize best clips
-- Prepare demonstration order
-- Make the app/demo flow understandable
+- Organize best true positives
+- Organize meaningful false positives
+- Organize meaningful false negatives
+- Organize borderline examples
+- Prepare clip example set for final demo use
 
 ### Output
-Final demo package.
+Final example-selection package for the end-user demo.
 
 ---
 
-## Branch 5C — Final Report/Slides Package
+# Phase 6 — New VOD Inference Pipeline
+
 ### Dependency
-Final metrics package and final demo package complete
+Branch 5A complete
+
+### Tasks
+- Take a new unlabeled VOD as input
+- Break the VOD into fixed-length clips
+- Save generated clips in the expected structure
+- Run feature extraction on the new clips
+- Run inference on the extracted features
+- Score and rank clips by highlight-worthiness
+- Save ranked outputs and selected clips
+
+### Output
+Working new-VOD pipeline that turns one raw VOD into ranked highlight candidates.
+
+---
+
+# Phase 7 — Highlight Clip Selection
+
+### Dependency
+Phase 6 complete
+
+### Tasks
+- Select top highlight clips from ranked outputs
+- Remove weak or redundant clips if needed
+- Keep clips that best represent the final recap
+- Save selected clips for final video assembly
+
+### Output
+Final selected highlight clip package for video assembly.
+
+---
+
+# Phase 8 — Final Video Assembly
+
+### Dependency
+Phase 7 complete
+
+### Tasks
+- Organize selected highlight clips
+- Put clips in a coherent order
+- Add a simple hook / teaser at the beginning
+- Merge selected clips into one final condensed video
+- Export final video in demo-ready format
+
+### Output
+Final generated highlight video package.
+
+---
+
+# Phase 9 — Final Report and Delivery
+
+### Dependency
+Branch 5A complete and Phase 8 complete
 
 ### Tasks
 - Write methodology summary
 - Write dataset summary
 - Write results summary
 - Add visuals
+- Add demo examples
+- Add final generated video results
 - Build slides
 
 ### Output
-Submission-ready report and presentation.
-
----
-
-# How the 3 teammates should work
-
-## Everyone works on the app, but by branch
-At any point, each teammate should pick a live branch that is unblocked.
-
-Example:
-- Teammate A works on Branch 2A
-- Teammate B works on Branch 2B
-- Teammate C works on Branch 2C
-
-Then after that:
-- Teammate A may move to Branch 3A
-- Teammate B may move to Branch 3C
-- Teammate C may move to Branch 3B
-
-This keeps everyone active.
-
----
-
-# Recommended immediate assignment for tomorrow
-
-## Teammate 1
-Start Branch 1A:
-- dataset loader
-- unique ID handling
-- path validation
-
-## Teammate 2
-Start Branch 1C and Branch 2B prep:
-- split strategy
-- model/training skeleton
-- metric functions
-
-## Teammate 3
-Start Branch 1B and Branch 2C prep:
-- repo structure cleanup
-- inference output structure
-- ranking/prediction review skeleton
-
-Once Branch 1A is done:
-- Teammate 1 moves into Branch 2A feature extraction
-- Teammate 2 continues Branch 2B training framework
-- Teammate 3 continues Branch 2C inference/demo framework
-
----
-
-# Daily team checkpoints
-Every day, ask these 4 questions:
-1. What branch was completed today?
-2. What new branches are now unblocked?
-3. What code/contracts changed that everyone needs to know?
-4. What is the next most important dependency to clear?
-
-Keep these check-ins short and focused.
-
----
-
-# Rules to avoid blocking each other
-- Agree on input/output formats before coding in parallel
-- Push code in small commits
-- Do not wait for perfection before handing off
-- When blocked, switch to another open branch
-- Do not expand scope unless final results are already working
-
----
-
-# Minimum success path
-If time gets tight, the minimum path is:
-- Phase 0
-- Phase 1A + 1C
-- Phase 2A + 2B + 2C
-- Phase 3A + 3B + 3C
-- Phase 5A + 5B + 5C
-
-This gives us:
-- working dataset pipeline
-- trained model
-- metrics
-- demo outputs
-- report/presentation
-
----
-
-# Final note
-The team should always prioritize **clearing dependencies** over polishing optional features.
-
-The project succeeds if we can show:
-- custom dataset
-- trained neural network
-- evaluation metrics
-- inference results
-- demo-ready examples
-
-Everything else is secondary.
+Submission-ready report, final presentation, and final demo package.
