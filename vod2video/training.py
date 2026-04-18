@@ -135,6 +135,7 @@ def train_model(
     optimizer: torch.optim.Optimizer,
     training_config: TrainingConfig,
     feature_names: list[str],
+    normalization_stats: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Any]:
     set_random_seed(training_config.random_seed)
     device = torch.device(training_config.device)
@@ -189,6 +190,7 @@ def train_model(
             training_config=training_config.to_serializable_dict(),
             metrics=epoch_record["val"],
             feature_names=feature_names,
+            normalization_stats=normalization_stats,
         )
 
         if training_config.checkpoint.save_latest:

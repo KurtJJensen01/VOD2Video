@@ -153,6 +153,62 @@ will otherwise fall back to visual-only features with documented audio columns:
 python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
 ```
 
+To score a Phase 2A feature manifest with a trained Phase 2B checkpoint and
+write ranked Branch 2C demo outputs, run:
+
+```bash
+python tools/score_feature_manifest.py --checkpoint artifacts/training/branch_2b_real_feature_audio_smoke/best_model.pt --feature-manifest artifacts/features/branch_2a/clip_features.csv
+```
+
+To run the first real end-to-end baseline training workflow for Branch 3A and
+write a presentation-friendly metrics summary, run:
+
+```bash
+python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
+```
+
+To organize scored prediction outputs into Branch 3B review artifacts for
+presentation and error analysis, run:
+
+```bash
+python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
+```
+
+If the prediction CSV is unlabeled, you can merge labels from a separate CSV:
+
+```bash
+python tools/review_predictions.py --prediction-csv artifacts/inference/branch_2c/scored_clips.csv --labels-csv artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/review/branch_3b
+```
+
+To generate Branch 3C presentation-ready confusion matrices, metric tables,
+comparison artifacts, and simple charts from the saved 3A/3B outputs, run:
+
+```bash
+python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
+```
+
+To run the Branch 4A feature improvement workflow and compare visual-only,
+audio-only, metadata-only, and combined feature subsets, run:
+
+```bash
+python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
+```
+
+To run the Branch 4B model improvement workflow and compare a small set of
+practical training/model variants on the best current feature setup, run:
+
+```bash
+python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
+```
+
+To run the Branch 4C demo example selection workflow and generate ranked
+presentation-ready TP/FP/FN/highlight candidate lists from the current best
+Branch 4B experiment, run:
+
+```bash
+python tools/select_demo_examples.py --output-dir artifacts/demo_selection/branch_4c
+```
+
 --- 
 
 ## Notes

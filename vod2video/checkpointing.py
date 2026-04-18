@@ -36,8 +36,9 @@ def build_checkpoint_payload(
     training_config: dict[str, Any],
     metrics: dict[str, float | int],
     feature_names: list[str],
+    normalization_stats: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "epoch": epoch,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -46,6 +47,9 @@ def build_checkpoint_payload(
         "metrics": metrics,
         "feature_names": feature_names,
     }
+    if normalization_stats is not None:
+        payload["normalization_stats"] = normalization_stats
+    return payload
 
 
 def save_checkpoint(
