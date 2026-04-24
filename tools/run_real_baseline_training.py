@@ -18,10 +18,15 @@ if str(REPO_ROOT) not in sys.path:
 
 from vod2video.clip_features import DEFAULT_FEATURE_COLUMNS  # noqa: E402
 from vod2video.evaluation import evaluate_checkpoint_on_manifest  # noqa: E402
+from vod2video.metrics import sweep_thresholds  # noqa: E402
 from vod2video.models import build_model  # noqa: E402
 from vod2video.training import train_model  # noqa: E402
 from vod2video.training_config import CheckpointConfig, DataConfig, ModelConfig, TrainingConfig  # noqa: E402
-from vod2video.training_data import TrainingDataError, build_dataloaders_from_manifest  # noqa: E402
+from vod2video.training_data import (  # noqa: E402
+    TrainingDataError,
+    build_video_audio_dataloaders_from_manifest,
+    compute_positive_class_weight_from_manifest,
+)
 
 
 DEFAULT_COMPARE_CHECKPOINT = REPO_ROOT / "artifacts" / "training" / "branch_2b_baseline" / "best_model.pt"
@@ -50,6 +55,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=0.0, help="Optimizer weight decay.")
     parser.add_argument("--hidden-dim", type=int, default=32, help="Hidden layer width.")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate.")
+    parser.add_argument(
+        "--unfreeze-backbone",
+        action="store_true",
+        help="Unfreeze the ResNet18 backbone for experimentation.",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument(
         "--device",
@@ -105,21 +115,7 @@ def resolve_positive_class_weight(args: argparse.Namespace, manifest_path: Path)
         return float(args.positive_class_weight)
     if args.disable_auto_class_weight:
         return None
-
-    manifest = pd.read_csv(manifest_path)
-    if "split" not in manifest.columns or "label" not in manifest.columns:
-        raise TrainingDataError("Feature manifest must contain split and label columns.")
-
-    train_rows = manifest.loc[manifest["split"] == "train"].copy()
-    if train_rows.empty:
-        raise TrainingDataError("Feature manifest train split is empty.")
-
-    label_counts = train_rows["label"].value_counts().to_dict()
-    positive_count = int(label_counts.get(1, 0))
-    negative_count = int(label_counts.get(0, 0))
-    if positive_count == 0:
-        raise TrainingDataError("Train split contains no positive examples; cannot derive class weight.")
-    return negative_count / positive_count
+    return compute_positive_class_weight_from_manifest(manifest_path, cap=10.0)
 
 
 def sanitize_metric_dict(metrics: dict[str, float | int]) -> dict[str, float | int | None]:
@@ -156,6 +152,16 @@ def build_metrics_table(history: dict[str, object], test_metrics: dict[str, floa
     return pd.DataFrame(rows)
 
 
+def choose_threshold_from_val_predictions(predictions: pd.DataFrame) -> float:
+    probabilities = torch.tensor(
+        predictions["predicted_probability"].to_numpy(dtype="float32"),
+        dtype=torch.float32,
+    ).clamp(1e-6, 1.0 - 1e-6)
+    labels = torch.tensor(predictions["label"].to_numpy(dtype="float32"), dtype=torch.float32)
+    threshold, _ = sweep_thresholds(torch.logit(probabilities), labels, loss=float("nan"), min_precision=0.15)
+    return float(threshold)
+
+
 def build_run_summary(
     *,
     args: argparse.Namespace,
@@ -178,17 +184,19 @@ def build_run_summary(
         "monitor_metric": args.monitor_metric,
         "best_metric_value": history["best_metric_value"],
         "feature_columns": list(args.feature_columns),
-        "feature_count": len(args.feature_columns),
+        "feature_count": 7,
         "positive_class_weight": positive_class_weight,
+        "decision_threshold": float(val_evaluation["threshold"]),
         "training_config": {
             "epochs": args.epochs,
             "batch_size": args.batch_size,
             "learning_rate": args.learning_rate,
             "weight_decay": args.weight_decay,
             "hidden_dim": args.hidden_dim,
-            "dropout": args.dropout,
+            "dropout": 0.3,
             "seed": args.seed,
             "device": args.device,
+            "unfreeze_backbone": args.unfreeze_backbone,
         },
         "best_epoch_metrics": {
             "train": sanitize_metric_dict(epoch_record["train"]),
@@ -241,18 +249,17 @@ def main() -> int:
             split_manifest_path=args.feature_manifest,
             batch_size=args.batch_size,
         )
-        bundle = build_dataloaders_from_manifest(
-            data_config,
-            feature_names=args.feature_columns,
-        )
+        bundle = build_video_audio_dataloaders_from_manifest(data_config)
     except (FileNotFoundError, TrainingDataError, ValueError) as exc:
         print(f"Training data setup failed: {exc}", file=sys.stderr)
         return 1
 
     model_config = ModelConfig(
-        input_dim=bundle.input_dim,
-        hidden_dim=args.hidden_dim,
-        dropout=args.dropout,
+        model_name="cnn_lstm_audio",
+        dropout=0.3,
+        lstm_hidden_dim=256,
+        audio_feature_dim=7,
+        unfreeze_backbone=args.unfreeze_backbone,
     )
     training_config = TrainingConfig(
         learning_rate=args.learning_rate,
@@ -293,17 +300,36 @@ def main() -> int:
         batch_size=args.batch_size,
         device=args.device,
     )
+    chosen_eval_threshold = choose_threshold_from_val_predictions(val_predictions)
+    val_evaluation, val_predictions = evaluate_checkpoint_on_manifest(
+        checkpoint_path=Path(history["best_checkpoint_path"]),
+        feature_manifest_path=args.feature_manifest,
+        split_name=data_config.val_split_name,
+        batch_size=args.batch_size,
+        threshold=chosen_eval_threshold,
+        device=args.device,
+    )
+    train_evaluation, train_predictions = evaluate_checkpoint_on_manifest(
+        checkpoint_path=Path(history["best_checkpoint_path"]),
+        feature_manifest_path=args.feature_manifest,
+        split_name=data_config.train_split_name,
+        batch_size=args.batch_size,
+        threshold=chosen_eval_threshold,
+        device=args.device,
+    )
     test_evaluation, test_predictions = evaluate_checkpoint_on_manifest(
         checkpoint_path=Path(history["best_checkpoint_path"]),
         feature_manifest_path=args.feature_manifest,
         split_name=data_config.test_split_name,
         batch_size=args.batch_size,
+        threshold=chosen_eval_threshold,
         device=args.device,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     metrics_table = build_metrics_table(history, sanitize_metric_dict(test_evaluation.metrics.to_dict()))
     metrics_table.to_csv(output_dir / "metrics_table.csv", index=False)
+    train_predictions.to_csv(output_dir / "train_predictions.csv", index=False)
     val_predictions.to_csv(output_dir / "val_predictions.csv", index=False)
     test_predictions.to_csv(output_dir / "test_predictions.csv", index=False)
 
@@ -315,6 +341,7 @@ def main() -> int:
         val_evaluation={
             "metrics": sanitize_metric_dict(val_payload["metrics"]),
             "confusion_matrix": val_payload["confusion_matrix"],
+            "threshold": val_payload["threshold"],
         },
         test_evaluation={
             "metrics": sanitize_metric_dict(test_payload["metrics"]),
@@ -331,6 +358,10 @@ def main() -> int:
     (output_dir / "evaluation_summary.json").write_text(
         json.dumps(
             {
+                "train": {
+                    **train_evaluation.to_dict(),
+                    "metrics": sanitize_metric_dict(train_evaluation.metrics.to_dict()),
+                },
                 "val": {
                     **val_payload,
                     "metrics": sanitize_metric_dict(val_payload["metrics"]),

@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from .models import build_model
 from .training_config import ModelConfig
+from .training_data import VideoAudioSplitManifestDataset
 
 DEFAULT_OUTPUT_COLUMNS = (
     "score_rank",
@@ -98,7 +99,7 @@ def load_inference_checkpoint(
         raise InferenceError("Checkpoint is missing a non-empty feature_names list.")
 
     model_config = ModelConfig(**model_config_data)
-    if model_config.input_dim != len(feature_names):
+    if model_config.model_name == "mlp_baseline" and model_config.input_dim != len(feature_names):
         raise InferenceError(
             f"Checkpoint input_dim={model_config.input_dim} does not match "
             f"{len(feature_names)} feature columns."
@@ -229,8 +230,11 @@ def _run_inference(
     collected_logits: list[torch.Tensor] = []
     with torch.no_grad():
         for batch in dataloader:
-            features = batch["features"].to(device)
-            logits = model(features)
+            if "frames" in batch and "audio_features" in batch:
+                logits = model(batch["frames"].to(device), batch["audio_features"].to(device))
+            else:
+                features = batch["features"].to(device)
+                logits = model(features)
             collected_logits.append(logits.detach().cpu())
 
     if not collected_logits:
@@ -244,6 +248,7 @@ def build_prediction_dataframe(
     *,
     threshold: float,
 ) -> pd.DataFrame:
+    probabilities = probabilities.reshape(-1)
     if len(manifest_dataframe) != int(probabilities.numel()):
         raise InferenceError("Prediction count does not match feature manifest row count.")
 
@@ -278,15 +283,19 @@ def score_feature_manifest(
         threshold=threshold,
     )
     feature_manifest = load_feature_manifest_for_inference(feature_manifest_path)
-    prepared_features, normalization_applied, normalization_source = prepare_feature_frame_for_inference(
-        feature_manifest,
-        feature_names=checkpoint.feature_names,
-        normalization_stats=checkpoint.normalization_stats,
-    )
-
-    dataset = FeatureManifestInferenceDataset(
-        torch.tensor(prepared_features.to_numpy(dtype="float32"), dtype=torch.float32)
-    )
+    if str(checkpoint.model_config.get("model_name")) == "cnn_lstm_audio":
+        dataset = VideoAudioSplitManifestDataset(feature_manifest)
+        normalization_applied = False
+        normalization_source = "not_applied"
+    else:
+        prepared_features, normalization_applied, normalization_source = prepare_feature_frame_for_inference(
+            feature_manifest,
+            feature_names=checkpoint.feature_names,
+            normalization_stats=checkpoint.normalization_stats,
+        )
+        dataset = FeatureManifestInferenceDataset(
+            torch.tensor(prepared_features.to_numpy(dtype="float32"), dtype=torch.float32)
+        )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     logits = _run_inference(checkpoint.model, dataloader, device=checkpoint.device)
     probabilities = torch.sigmoid(logits)

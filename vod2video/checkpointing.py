@@ -66,4 +66,6 @@ def save_training_history(history: dict[str, Any], config: CheckpointConfig) -> 
     output_dir = ensure_checkpoint_dir(config)
     history_path = output_dir / config.history_filename
     history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    metrics_path = output_dir / config.metrics_filename
+    metrics_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
     return history_path

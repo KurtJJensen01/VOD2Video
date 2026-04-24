@@ -17,7 +17,7 @@ from .inference import (
     prepare_feature_frame_for_inference,
 )
 from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics
-from .training_data import prepare_training_manifest
+from .training_data import VideoAudioSplitManifestDataset, prepare_training_manifest
 
 
 @dataclass(frozen=True)
@@ -74,29 +74,40 @@ def evaluate_checkpoint_on_manifest(
         raise InferenceError("Feature manifest must contain a label column for labeled evaluation.")
 
     missing_feature_columns = [name for name in checkpoint.feature_names if name not in manifest.columns]
-    if missing_feature_columns:
+    is_hybrid_model = str(checkpoint.model_config.get("model_name")) == "cnn_lstm_audio"
+    if missing_feature_columns and not is_hybrid_model:
         manifest = prepare_training_manifest(manifest)
 
     split_dataframe = manifest.loc[manifest["split"] == split_name].copy().reset_index(drop=True)
     if split_dataframe.empty:
         raise InferenceError(f"Feature manifest split '{split_name}' is empty.")
 
-    prepared_features, normalization_applied, normalization_source = prepare_feature_frame_for_inference(
-        split_dataframe,
-        feature_names=checkpoint.feature_names,
-        normalization_stats=checkpoint.normalization_stats,
-    )
-
-    dataset = _FeatureOnlyDataset(
-        torch.tensor(prepared_features.to_numpy(dtype="float32"), dtype=torch.float32)
-    )
+    if is_hybrid_model:
+        dataset = VideoAudioSplitManifestDataset(split_dataframe)
+        normalization_applied = False
+        normalization_source = "not_applied"
+    else:
+        prepared_features, normalization_applied, normalization_source = prepare_feature_frame_for_inference(
+            split_dataframe,
+            feature_names=checkpoint.feature_names,
+            normalization_stats=checkpoint.normalization_stats,
+        )
+        dataset = _FeatureOnlyDataset(
+            torch.tensor(prepared_features.to_numpy(dtype="float32"), dtype=torch.float32)
+        )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     collected_logits: list[torch.Tensor] = []
     with torch.no_grad():
         for batch in dataloader:
-            features = batch["features"].to(checkpoint.device)
-            logits = checkpoint.model(features)
+            if "frames" in batch and "audio_features" in batch:
+                logits = checkpoint.model(
+                    batch["frames"].to(checkpoint.device),
+                    batch["audio_features"].to(checkpoint.device),
+                )
+            else:
+                features = batch["features"].to(checkpoint.device)
+                logits = checkpoint.model(features)
             collected_logits.append(logits.detach().cpu())
 
     if not collected_logits:

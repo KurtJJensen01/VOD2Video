@@ -17,7 +17,7 @@ from .checkpointing import (
     save_checkpoint,
     save_training_history,
 )
-from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics
+from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics, sweep_thresholds
 from .training_config import ModelConfig, TrainingConfig
 
 
@@ -53,14 +53,13 @@ def _run_model_on_loader(
     model.train(mode=is_training)
 
     for batch in dataloader:
-        features = batch["features"].to(device)
-        labels = batch["label"].to(device)
+        labels = batch["label"].to(device).view(-1, 1)
 
         if optimizer is not None:
             optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(is_training):
-            logits = model(features)
+            logits = _forward_batch(model, batch, device=device)
             loss = loss_fn(logits, labels)
             if optimizer is not None:
                 loss.backward()
@@ -77,6 +76,20 @@ def _run_model_on_loader(
 
     average_loss = total_loss / total_examples
     return average_loss, torch.cat(collected_logits), torch.cat(collected_labels)
+
+
+def _forward_batch(
+    model: nn.Module,
+    batch: dict[str, torch.Tensor],
+    *,
+    device: torch.device,
+) -> torch.Tensor:
+    if "frames" in batch and "audio_features" in batch:
+        frames = batch["frames"].to(device)
+        audio_features = batch["audio_features"].to(device)
+        return model(frames, audio_features)
+    features = batch["features"].to(device)
+    return model(features)
 
 
 def validate_model(
@@ -157,37 +170,51 @@ def train_model(
     latest_checkpoint_path: str | None = None
 
     for epoch in range(1, training_config.epochs + 1):
-        train_metrics = train_one_epoch(
+        train_loss, train_logits, train_labels = _run_model_on_loader(
             model,
             train_loader,
-            optimizer,
             device=device,
             loss_fn=loss_fn,
-            threshold=training_config.decision_threshold,
+            optimizer=optimizer,
         )
-        val_metrics = validate_model(
+        val_loss, val_logits, val_labels = _run_model_on_loader(
             model,
             val_loader,
             device=device,
             loss_fn=loss_fn,
-            threshold=training_config.decision_threshold,
+            optimizer=None,
+        )
+        chosen_threshold, val_metrics = sweep_thresholds(
+            val_logits,
+            val_labels,
+            loss=val_loss,
+            min_precision=0.15,
+        )
+        train_metrics = compute_binary_classification_metrics(
+            train_logits,
+            train_labels,
+            loss=train_loss,
+            threshold=chosen_threshold,
         )
 
         epoch_record = {
             "epoch": epoch,
             "train": train_metrics.to_dict(),
             "val": val_metrics.to_dict(),
+            "chosen_threshold": chosen_threshold,
         }
         history["epochs"].append(epoch_record)
 
         monitor_metric_name = training_config.checkpoint.monitor_metric
         monitored_value = float(epoch_record["val"][monitor_metric_name])
+        serializable_training_config = training_config.to_serializable_dict()
+        serializable_training_config["decision_threshold"] = float(chosen_threshold)
         checkpoint_payload = build_checkpoint_payload(
             epoch=epoch,
             model=model,
             optimizer=optimizer,
             model_config=asdict(model_config),
-            training_config=training_config.to_serializable_dict(),
+            training_config=serializable_training_config,
             metrics=epoch_record["val"],
             feature_names=feature_names,
             normalization_stats=normalization_stats,
