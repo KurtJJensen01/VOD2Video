@@ -166,8 +166,10 @@ def train_model(
     }
 
     best_metric_value: float | None = None
+    best_val_f1: float | None = None
     best_checkpoint_path: str | None = None
     latest_checkpoint_path: str | None = None
+    epochs_without_val_f1_improvement = 0
 
     for epoch in range(1, training_config.epochs + 1):
         train_loss, train_logits, train_labels = _run_model_on_loader(
@@ -202,11 +204,20 @@ def train_model(
             "train": train_metrics.to_dict(),
             "val": val_metrics.to_dict(),
             "chosen_threshold": chosen_threshold,
+            "learning_rate": float(optimizer.param_groups[0]["lr"]),
         }
         history["epochs"].append(epoch_record)
 
         monitor_metric_name = training_config.checkpoint.monitor_metric
         monitored_value = float(epoch_record["val"][monitor_metric_name])
+        val_f1 = float(epoch_record["val"]["f1"])
+        val_f1_improved = is_better_metric(val_f1, best_val_f1, "max")
+        if val_f1_improved:
+            best_val_f1 = val_f1
+            epochs_without_val_f1_improvement = 0
+        else:
+            epochs_without_val_f1_improvement += 1
+
         serializable_training_config = training_config.to_serializable_dict()
         serializable_training_config["decision_threshold"] = float(chosen_threshold)
         checkpoint_payload = build_checkpoint_payload(
@@ -235,6 +246,28 @@ def train_model(
             best_path = checkpoint_dir / training_config.checkpoint.best_filename
             best_checkpoint_path = str(save_checkpoint(checkpoint_payload, checkpoint_path=best_path))
 
+        if (
+            not val_f1_improved
+            and training_config.lr_scheduler_patience > 0
+            and epochs_without_val_f1_improvement % training_config.lr_scheduler_patience == 0
+        ):
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] *= training_config.lr_scheduler_factor
+            epoch_record["lr_reduced"] = True
+            epoch_record["next_learning_rate"] = float(optimizer.param_groups[0]["lr"])
+        else:
+            epoch_record["lr_reduced"] = False
+            epoch_record["next_learning_rate"] = float(optimizer.param_groups[0]["lr"])
+
+        if training_config.patience > 0 and epochs_without_val_f1_improvement >= training_config.patience:
+            history["early_stopped"] = True
+            history["early_stopped_epoch"] = epoch
+            history["early_stopping_reason"] = (
+                f"Validation F1 did not improve for {training_config.patience} consecutive epochs."
+            )
+            break
+
+    history.setdefault("early_stopped", False)
     history["best_checkpoint_path"] = best_checkpoint_path
     history["latest_checkpoint_path"] = latest_checkpoint_path
     history_path = save_training_history(history, training_config.checkpoint)

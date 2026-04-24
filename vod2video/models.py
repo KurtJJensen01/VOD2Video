@@ -33,7 +33,7 @@ class CNNLSTMAudioHighlightModel(nn.Module):
         *,
         lstm_hidden_dim: int = 256,
         audio_feature_dim: int = 7,
-        dropout: float = 0.3,
+        dropout: float = 0.5,
         unfreeze_backbone: bool = False,
         pretrained_backbone: bool = True,
     ) -> None:

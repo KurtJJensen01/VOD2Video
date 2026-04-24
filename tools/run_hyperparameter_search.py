@@ -40,14 +40,14 @@ from vod2video.training_data import (  # noqa: E402
 )
 
 
-EPOCH_GRID = [50, 75, 100]
-LEARNING_RATE_GRID = [0.00005, 0.0001, 0.0002]
+EPOCH_GRID = [50, 75]
+LEARNING_RATE_GRID = [0.0001, 0.00005]
 BATCH_SIZE_GRID = [4, 8]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run an 18-combination hyperparameter grid search for the CNN+LSTM+audio model."
+        description="Run a hyperparameter grid search for the CNN+LSTM+audio model."
     )
     parser.add_argument(
         "--feature-manifest",
@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "artifacts" / "hyperparameter_search_v2",
+        default=REPO_ROOT / "artifacts" / "hyperparameter_search_v3",
         help="Directory where grid-search outputs will be written.",
     )
     parser.add_argument(
@@ -68,6 +68,13 @@ def parse_args() -> argparse.Namespace:
         help="Torch device string. Defaults to CUDA when available, otherwise CPU.",
     )
     parser.add_argument("--num-workers", type=int, default=0, help="DataLoader worker count.")
+    parser.add_argument("--weight-decay", type=float, default=0.01, help="Optimizer weight decay.")
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=10,
+        help="Stop each run after this many consecutive epochs without validation F1 improvement.",
+    )
     return parser.parse_args()
 
 
@@ -104,6 +111,8 @@ def run_combination(
     device: str,
     num_workers: int,
     positive_class_weight: float | None,
+    weight_decay: float,
+    patience: int,
 ) -> dict[str, Any]:
     data_config = DataConfig(
         split_manifest_path=feature_manifest_path,
@@ -115,15 +124,16 @@ def run_combination(
 
     model_config = ModelConfig(
         model_name="cnn_lstm_audio",
-        dropout=0.3,
+        dropout=0.5,
         lstm_hidden_dim=256,
         audio_feature_dim=7,
         unfreeze_backbone=False,
     )
     training_config = TrainingConfig(
         learning_rate=learning_rate,
-        weight_decay=0.0,
+        weight_decay=weight_decay,
         epochs=epochs,
+        patience=patience,
         random_seed=42,
         device=device,
         positive_class_weight=positive_class_weight,
@@ -188,6 +198,8 @@ def run_combination(
         "epochs": epochs,
         "learning_rate": learning_rate,
         "batch_size": batch_size,
+        "weight_decay": weight_decay,
+        "patience": patience,
         **metrics_with_prefix("val", val_metrics),
         **metrics_with_prefix("test", test_metrics),
         "chosen_threshold": float(chosen_threshold),
@@ -221,6 +233,8 @@ def load_completed_result(
     result.setdefault("epochs", epochs)
     result.setdefault("learning_rate", learning_rate)
     result.setdefault("batch_size", batch_size)
+    result.setdefault("weight_decay", 0.0)
+    result.setdefault("patience", None)
     result.setdefault("status", "success")
     result.setdefault("error", "")
     result.setdefault("run_name", run_name)
@@ -233,6 +247,8 @@ def save_results_table(results: list[dict[str, Any]], output_dir: Path) -> pd.Da
         "epochs",
         "learning_rate",
         "batch_size",
+        "weight_decay",
+        "patience",
         "val_f1",
         "val_recall",
         "val_precision",
@@ -383,6 +399,8 @@ def print_top_5(results: pd.DataFrame) -> None:
         "epochs",
         "learning_rate",
         "batch_size",
+        "weight_decay",
+        "patience",
         "val_f1",
         "val_recall",
         "val_precision",
@@ -461,6 +479,8 @@ def main() -> int:
                 device=args.device,
                 num_workers=args.num_workers,
                 positive_class_weight=positive_class_weight,
+                weight_decay=args.weight_decay,
+                patience=args.patience,
             )
         except Exception as exc:  # noqa: BLE001 - a failed run should not stop the grid.
             failure = {
