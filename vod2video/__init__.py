@@ -52,7 +52,7 @@ from .feature_improvement import (
     write_feature_experiment_outputs,
 )
 from .metrics import BinaryClassificationMetrics, compute_binary_classification_metrics
-from .models import MLPBaselineModel, build_model
+from .models import CNNLSTMAudioHighlightModel, MLPBaselineModel, build_model
 from .inference import (
     InferenceError,
     InferenceSummary,
@@ -77,10 +77,14 @@ from .training import train_model, train_one_epoch, validate_model
 from .training_config import CheckpointConfig, DataConfig, ModelConfig, TrainingConfig
 from .training_data import (
     DEFAULT_FEATURE_NAMES,
+    HYBRID_AUDIO_FEATURE_NAMES,
     DatasetBundle,
     SplitManifestDataset,
     TrainingDataError,
     build_dataloaders_from_manifest,
+    build_video_audio_dataloaders_from_manifest,
+    compute_positive_class_weight_from_dataframe,
+    compute_positive_class_weight_from_manifest,
     load_split_manifest,
     prepare_training_manifest,
 )
@@ -101,11 +105,13 @@ __all__ = [
     "AudioToolStatus",
     "AUDIO_FEATURE_COLUMNS",
     "CheckpointConfig",
+    "CNNLSTMAudioHighlightModel",
     "ClipFeatureExtractionError",
     "ClipSamplingConfig",
     "DEFAULT_FEATURE_NAMES",
     "DEFAULT_FEATURE_COLUMNS",
     "DataConfig",
+    "HYBRID_AUDIO_FEATURE_NAMES",
     "DatasetBundle",
     "DatasetSummary",
     "DatasetValidationError",
@@ -134,6 +140,7 @@ __all__ = [
     "VisualizationError",
     "build_default_experiments",
     "build_dataloaders_from_manifest",
+    "build_video_audio_dataloaders_from_manifest",
     "build_confusion_matrix_table",
     "build_feature_experiment_summary",
     "build_feature_experiment_table",
@@ -146,6 +153,8 @@ __all__ = [
     "build_metrics_table",
     "build_model",
     "compute_binary_classification_metrics",
+    "compute_positive_class_weight_from_dataframe",
+    "compute_positive_class_weight_from_manifest",
     "build_review_summary_table",
     "extract_audio_features",
     "extract_clip_features",

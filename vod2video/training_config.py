@@ -20,16 +20,22 @@ class DataConfig:
     train_split_name: str = "train"
     val_split_name: str = "val"
     test_split_name: str = "test"
+    frame_count: int = 10
+    frame_size: int = 224
 
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Configuration for the current placeholder baseline model."""
+    """Configuration for highlight classification models."""
 
     model_name: str = "mlp_baseline"
     input_dim: int = 4
     hidden_dim: int = 16
     dropout: float = 0.1
+    lstm_hidden_dim: int = 256
+    audio_feature_dim: int = 7
+    unfreeze_backbone: bool = False
+    pretrained_backbone: bool = True
 
 
 @dataclass(frozen=True)
@@ -43,6 +49,7 @@ class CheckpointConfig:
     best_filename: str = "best_model.pt"
     latest_filename: str = "latest_model.pt"
     history_filename: str = "training_history.json"
+    metrics_filename: str = "metrics.json"
 
 
 @dataclass(frozen=True)

@@ -37,6 +37,8 @@ def compute_binary_classification_metrics(
     loss: float,
     threshold: float = 0.5,
 ) -> BinaryClassificationMetrics:
+    logits = logits.reshape(-1)
+    labels = labels.reshape(-1)
     probabilities = torch.sigmoid(logits)
     predictions = (probabilities >= threshold).to(dtype=torch.int64)
     label_ints = labels.to(dtype=torch.int64)
@@ -64,3 +66,45 @@ def compute_binary_classification_metrics(
         false_negatives=false_negatives,
         sample_count=sample_count,
     )
+
+
+def sweep_thresholds(
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    *,
+    loss: float,
+    min_threshold: float = 0.1,
+    max_threshold: float = 0.9,
+    step: float = 0.05,
+    min_precision: float = 0.15,
+) -> tuple[float, BinaryClassificationMetrics]:
+    """Choose the threshold with max recall subject to a precision floor."""
+
+    thresholds = torch.arange(
+        min_threshold,
+        max_threshold + step / 2,
+        step,
+        dtype=torch.float32,
+    ).tolist()
+
+    candidates: list[tuple[float, BinaryClassificationMetrics]] = []
+    fallback: tuple[float, BinaryClassificationMetrics] | None = None
+    for threshold in thresholds:
+        rounded_threshold = round(float(threshold), 2)
+        metrics = compute_binary_classification_metrics(
+            logits,
+            labels,
+            loss=loss,
+            threshold=rounded_threshold,
+        )
+        pair = (rounded_threshold, metrics)
+        if fallback is None or metrics.f1 > fallback[1].f1:
+            fallback = pair
+        if metrics.precision >= min_precision:
+            candidates.append(pair)
+
+    if candidates:
+        return max(candidates, key=lambda item: (item[1].recall, item[1].f1, item[1].precision))
+    if fallback is None:
+        raise ValueError("Threshold sweep did not evaluate any thresholds.")
+    return fallback
