@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Iterable
 import warnings
@@ -100,6 +101,60 @@ def discover_labeled_dataset_sources(labeling_dir: Path) -> list[LabeledDatasetS
         )
         for csv_path in unique_csv_paths
     ]
+
+
+def load_labeled_dataset_sources_from_config(config_path: Path) -> list[LabeledDatasetSource]:
+    """Load labeled dataset sources from a root-level datasets.json file.
+
+    Relative paths are resolved from the config file's directory so teammates can
+    keep a portable repo-local dataset manifest.
+    """
+
+    resolved_config_path = config_path.expanduser().resolve()
+    if not resolved_config_path.exists():
+        raise FileNotFoundError(f"Dataset config not found: {resolved_config_path}")
+
+    try:
+        payload = json.loads(resolved_config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DatasetValidationError(f"Invalid dataset config JSON: {resolved_config_path}") from exc
+
+    if isinstance(payload, dict):
+        raw_sources = payload.get("sources")
+    else:
+        raw_sources = payload
+
+    if not isinstance(raw_sources, list) or not raw_sources:
+        raise DatasetValidationError("Dataset config must contain a non-empty sources list.")
+
+    base_dir = resolved_config_path.parent
+    sources: list[LabeledDatasetSource] = []
+    for index, raw_source in enumerate(raw_sources, start=1):
+        if not isinstance(raw_source, dict):
+            raise DatasetValidationError(f"Dataset source #{index} must be an object.")
+
+        missing = [
+            key
+            for key in ("source_name", "csv_path", "clip_root")
+            if not str(raw_source.get(key, "")).strip()
+        ]
+        if missing:
+            formatted = ", ".join(missing)
+            raise DatasetValidationError(
+                f"Dataset source #{index} is missing required field(s): {formatted}"
+            )
+
+        csv_path = Path(str(raw_source["csv_path"]))
+        clip_root = Path(str(raw_source["clip_root"]))
+        sources.append(
+            LabeledDatasetSource(
+                source_name=str(raw_source["source_name"]),
+                csv_path=csv_path if csv_path.is_absolute() else base_dir / csv_path,
+                clip_root=clip_root if clip_root.is_absolute() else base_dir / clip_root,
+            )
+        )
+
+    return sources
 
 
 def _validate_source_paths(source: LabeledDatasetSource) -> tuple[Path, Path | None]:

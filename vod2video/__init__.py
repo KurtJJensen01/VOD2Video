@@ -25,6 +25,7 @@ from .dataset_loader import (
     discover_labeled_dataset_sources,
     format_summary,
     load_labeled_dataset,
+    load_labeled_dataset_sources_from_config,
 )
 from .dataset_split import (
     DatasetSplit,
@@ -166,6 +167,7 @@ __all__ = [
     "generate_visualization_artifacts",
     "load_baseline_summary",
     "load_labeled_dataset",
+    "load_labeled_dataset_sources_from_config",
     "load_feature_source_manifest",
     "load_feature_manifest_for_inference",
     "load_prediction_review_csv",

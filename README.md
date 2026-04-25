@@ -2,7 +2,7 @@
 
 **VOD2Video** is an AI-powered VOD-to-YouTube editor that turns long livestream recordings into condensed, long-form YouTube highlight videos.
 
-The project focuses on building a system that can:
+The full project vision is to:
 - take a full livestream VOD as input
 - break it into short segments
 - predict which segments are highlights
@@ -10,211 +10,110 @@ The project focuses on building a system that can:
 - generate a short teaser intro
 - assemble a final long-form recap video
 
-This is a deep learning course project centered on **highlight detection and long-form VOD summarization**.
+This repository is the machine learning and dataset pipeline for the deep learning course project. The current final-project path is highlight detection on labeled 5-second clips, with predictions and visualizations used for the report and presentation.
 
----
+## Active Stable Pipeline: MLP Feature Baseline
 
-## Current Project Direction
+The active default workflow is the **feature-based MLP baseline**. This path performed better than the CNN+LSTM experiments and should be treated as the stable pipeline for final results.
 
-The current project plan is:
-- build a **custom labeled dataset** from livestream VODs
-- train a model to classify clips as **highlight** or **non-highlight**
-- evaluate the model with metrics such as accuracy, precision, recall, and F1-score
-- use predictions to support long-form recap generation
-
-The official academic plan is documented in `VOD2Video_Project_Proposal.md`.
-
----
-
-## Repository Documents
-
-### `README.md`
-High-level overview of the project, repository purpose, and document guide.
-
-### `TEAM_SCHEDULE.md`
-Current team execution plan.
-
-Use this for:
-- dependency order
-- parallel work branches
-- daily workflow
-- figuring out what can start next without blocking teammates
-
-### `VOD2Video_Project_Proposal.md`
-Official project proposal.
-
-Use this as the main source of truth for:
-- project goal
-- academic framing
-- planned model direction
-- experiments
-- dataset plan
-- expected outcome
-
-### `VOD2Video_Technical_Project_Spec.md`
-Technical handoff/spec document for teammates and their LLM assistants.
-
-Its purpose is to give an AI helper enough context to understand:
-- what VOD2Video is
-- what the team is trying to build
-- the overall system goal
-- the planned model direction
-- the expected pipeline and technical scope
-
-This file is mainly for teammate support and implementation context.
-
-### `VOD2Video_features.md`
-Feature reference list.
-
-This is **not** the main scheduling/workflow document anymore.
-It is now mainly a reference list of possible app features and ideas.
-
-### `tools/build_labeling_dataset.py`
-Dataset-building utility script.
-
-Use this to:
-- generate 5-second clips from a VOD
-- create `labels.csv`
-- prepare reviewable clip sets for manual labeling
-
----
-
-## Current Dataset Setup
-
-The current dataset structure is based on:
-- **2 VODs**
-- **2 CSV label files**
-- **2 clip folders**
-
-Each CSV contains labeled clip metadata for one VOD.
-The dataset uses:
-- `vod_id`
-- `segment_id`
-- `label`
-- relative `clip_path`
-
-Labels are:
-- `1 = highlight`
-- `0 = non-highlight`
-
----
-
-## Core Problem Formulation
-
-The main machine learning task is **binary classification**.
-
-Each sample is a short video segment.
-The model predicts whether that segment is:
-- `1 = highlight`
-- `0 = non-highlight`
-
-The output score can then be used to rank clips and support final recap generation.
-
----
-
-## Main Workflow
-
-1. Build labeled dataset from VOD clips
-2. Load and combine labeled clip data
-3. Extract training features / inputs
-4. Train highlight detection model
-5. Evaluate model performance
-6. Run inference on unseen clips or VOD segments
-7. Use predictions to support long-form highlight video generation
-
----
-
-## Generated Artifacts
-
-Some files under `artifacts/` are generated outputs and do not need to be committed.
-
-To regenerate split manifests locally, run:
+Run these commands from the repo root:
 
 ```bash
 python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
+python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
+python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
+python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
 ```
 
-To verify the Branch 2B training framework locally, run:
+That workflow does the following:
+
+1. Build or add labeled 5-second clip datasets.
+2. Generate a combined train/validation/test split manifest from all labeled CSVs.
+3. Extract visual/audio summary features from clip files.
+4. Train the MLP baseline on the feature manifest.
+5. Review test predictions and errors.
+6. Generate tables/charts for the report and presentation.
+
+## Dataset Setup
+
+Dataset sources are listed in root-level `datasets.json`. Each source has:
+
+- `source_name`
+- `csv_path`
+- `clip_root`
+
+`tools/test_dataset_split.py` prefers `datasets.json` when it exists. It still supports automatic discovery of `*_Labels.csv` files under `labeling_test/`, and it still supports explicit repeated `--csv` / `--clip-root` arguments.
+
+The current labeled source CSVs live in `labeling_test/`:
+
+- `1_Jynxzi_Labels.csv`
+- `2_Burnt_Peanut_Labels.csv`
+- `3_Jynxzi_Labels.csv`
+- `4_Burnt_Peanut_Labels.csv`
+
+The matching clip folders are local data and should not be committed.
+
+## Generated Artifacts
+
+Generated outputs go under `artifacts/` and are ignored by git. Regenerate them with the active workflow commands above.
+
+Important generated locations:
+
+- `artifacts/splits/branch_1c/`: train/val/test split manifests
+- `artifacts/features/branch_2a/`: extracted clip feature manifest
+- `artifacts/training/branch_3a_real_baseline/`: MLP training outputs, checkpoint, metrics, predictions
+- `artifacts/review/branch_3b/`: prediction review and error-analysis outputs
+- `artifacts/visualization/branch_3c/`: report/presentation visualizations
+- `artifacts/feature_improvement/`, `artifacts/model_improvement/`, `artifacts/hyperparameter_search*/`: experiment outputs
+
+Do not commit video clips, `.7z` clip archives, checkpoints, generated manifests, generated charts, or bulk generated outputs.
+
+## Experimental Work
+
+The CNN-only, CNN+LSTM, CNN+LSTM+audio, feature-subset, model-improvement, and hyperparameter-search work is useful project evidence, but it is **not** the main default workflow.
+
+Experimental entry points currently include:
 
 ```bash
 python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
+python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
+python tools/run_hyperparameter_search.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search
+python tools/visualize_cnn_run.py --input-dir artifacts/hyperparameter_search --output-dir artifacts/visualization/cnn_run
 ```
 
-To build the Branch 2A real feature manifest from actual clip contents, run:
+The reusable CNN+LSTM+audio model code remains in `vod2video/models.py` and the video/audio dataloader support remains in `vod2video/training_data.py` because moving those files would risk breaking imports. Treat them as experimental unless a teammate is specifically working on that path.
+
+## Legacy And Support Scripts
+
+Some scripts are retained for reproducibility or older branch workflows:
+
+- `tools/test_dataset_loader.py`: loader smoke-test utility
+- `tools/score_feature_manifest.py`: older inference/scoring path for a saved checkpoint
+- `tools/select_demo_examples.py`: later-stage demo selection from prediction artifacts
+- `outputs/`: older generated report/demo text outputs, now treated as generated material
+
+These are not deleted because they may still be useful for reproducing earlier project phases.
+
+## Install
+
+Create an environment, install dependencies, and make sure `ffmpeg`/`ffprobe` are on PATH if you want audio features:
 
 ```bash
-python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv
+pip install -r requirements.txt
 ```
 
-If `ffmpeg` is not on PATH, you can pass explicit tool paths and the extractor
-will otherwise fall back to visual-only features with documented audio columns:
+If `ffmpeg` is missing, feature extraction will continue with visual features and documented audio fallback columns. You can also pass explicit tool paths:
 
 ```bash
 python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
 ```
 
-To score a Phase 2A feature manifest with a trained Phase 2B checkpoint and
-write ranked Branch 2C demo outputs, run:
+## Project Docs
 
-```bash
-python tools/score_feature_manifest.py --checkpoint artifacts/training/branch_2b_real_feature_audio_smoke/best_model.pt --feature-manifest artifacts/features/branch_2a/clip_features.csv
-```
-
-To run the first real end-to-end baseline training workflow for Branch 3A and
-write a presentation-friendly metrics summary, run:
-
-```bash
-python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
-```
-
-To organize scored prediction outputs into Branch 3B review artifacts for
-presentation and error analysis, run:
-
-```bash
-python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
-```
-
-If the prediction CSV is unlabeled, you can merge labels from a separate CSV:
-
-```bash
-python tools/review_predictions.py --prediction-csv artifacts/inference/branch_2c/scored_clips.csv --labels-csv artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/review/branch_3b
-```
-
-To generate Branch 3C presentation-ready confusion matrices, metric tables,
-comparison artifacts, and simple charts from the saved 3A/3B outputs, run:
-
-```bash
-python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
-```
-
-To run the Branch 4A feature improvement workflow and compare visual-only,
-audio-only, metadata-only, and combined feature subsets, run:
-
-```bash
-python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
-```
-
-To run the Branch 4B model improvement workflow and compare a small set of
-practical training/model variants on the best current feature setup, run:
-
-```bash
-python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
-```
-
-To run the Branch 4C demo example selection workflow and generate ranked
-presentation-ready TP/FP/FN/highlight candidate lists from the current best
-Branch 4B experiment, run:
-
-```bash
-python tools/select_demo_examples.py --output-dir artifacts/demo_selection/branch_4c
-```
-
---- 
-
-## Notes
-
-- This project is focused on **long-form recap generation**, not Shorts generation.
-- `TEAM_SCHEDULE.md` is the active workflow guide for the team.
-- `VOD2Video_Project_Proposal.md` is the main academic plan.
-- `VOD2Video_Technical_Project_Spec.md` is the LLM/teammate handoff doc.
-- `VOD2Video_features.md` is now mainly a feature reference file rather than the main work-division plan.
+- `docs/PROJECT_STRUCTURE.md`: file and folder map
+- `docs/TEAM_SCHEDULE.md`: team execution plan
+- `docs/VOD2Video_Project_Proposal.md`: academic proposal
+- `docs/VOD2Video_Technical_Project_Spec.md`: technical handoff/spec
+- `docs/VOD2Video_features.md`: feature reference and ideas
