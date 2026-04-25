@@ -68,11 +68,11 @@ def parse_args() -> argparse.Namespace:
         help="Torch device string. Defaults to CUDA when available, otherwise CPU.",
     )
     parser.add_argument("--num-workers", type=int, default=0, help="DataLoader worker count.")
-    parser.add_argument("--weight-decay", type=float, default=0.01, help="Optimizer weight decay.")
+    parser.add_argument("--weight-decay", type=float, default=0.0001, help="Optimizer weight decay.")
     parser.add_argument(
         "--patience",
         type=int,
-        default=10,
+        default=15,
         help="Stop each run after this many consecutive epochs without validation F1 improvement.",
     )
     return parser.parse_args()
