@@ -262,7 +262,7 @@ A curated set of final demo examples.
 
 # Phase 5 — Final Model Lock
 
-## Branch 5A — Final Metrics Package - Drew
+## Branch 5A — Final Metrics Package — Drew/Kurt
 ### Dependency
 Branch 4B complete
 
@@ -281,7 +281,7 @@ Final locked model and technical results package.
 
 ---
 
-## Branch 5B — Final Demo Example Package
+## Branch 5B — Final Demo Example Package — Ian
 ### Dependency
 Branch 4C complete
 
