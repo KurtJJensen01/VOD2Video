@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 from vod2video.dataset_loader import (
     DatasetValidationError,
     LabeledDatasetSource,
+    discover_labeled_dataset_sources,
     format_summary,
     load_labeled_dataset,
 )
@@ -47,18 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 def build_sources_from_args(args: argparse.Namespace, repo_root: Path) -> list[LabeledDatasetSource]:
     if not args.csv_paths and not args.clip_roots:
-        return [
-            LabeledDatasetSource(
-                csv_path=repo_root / "labeling_test" / "1_Jynxzi_Labels.csv",
-                clip_root=repo_root / "labeling_test",
-                source_name="Jynxzi",
-            ),
-            LabeledDatasetSource(
-                csv_path=repo_root / "labeling_test" / "2_Burnt_Peanut_Labels.csv",
-                clip_root=repo_root / "labeling_test",
-                source_name="Burnt_Peanut",
-            ),
-        ]
+        return discover_labeled_dataset_sources(repo_root / "labeling_test")
 
     csv_paths = args.csv_paths or []
     clip_roots = args.clip_roots or []

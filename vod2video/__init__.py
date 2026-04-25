@@ -22,6 +22,7 @@ from .dataset_loader import (
     DatasetValidationError,
     LabeledDatasetSource,
     LoadedDataset,
+    discover_labeled_dataset_sources,
     format_summary,
     load_labeled_dataset,
 )
@@ -155,6 +156,7 @@ __all__ = [
     "compute_binary_classification_metrics",
     "compute_positive_class_weight_from_dataframe",
     "compute_positive_class_weight_from_manifest",
+    "discover_labeled_dataset_sources",
     "build_review_summary_table",
     "extract_audio_features",
     "extract_clip_features",

@@ -28,6 +28,8 @@ OUTPUT_COLUMNS = (
     "source_csv",
 )
 
+LABEL_CSV_PATTERNS = ("*_Labels.csv",)
+
 
 @dataclass(frozen=True)
 class LabeledDatasetSource:
@@ -70,6 +72,34 @@ class LoadedDataset:
 
 class DatasetValidationError(ValueError):
     """Raised when a labeled dataset fails validation."""
+
+
+def discover_labeled_dataset_sources(labeling_dir: Path) -> list[LabeledDatasetSource]:
+    """Discover labeled CSV sources in a labeling directory."""
+
+    resolved_labeling_dir = labeling_dir.expanduser().resolve()
+    if not resolved_labeling_dir.exists():
+        raise FileNotFoundError(f"Labeling directory not found: {resolved_labeling_dir}")
+
+    csv_paths: list[Path] = []
+    for pattern in LABEL_CSV_PATTERNS:
+        csv_paths.extend(resolved_labeling_dir.glob(pattern))
+
+    unique_csv_paths = sorted(set(csv_paths), key=lambda path: path.name.lower())
+    if not unique_csv_paths:
+        formatted_patterns = ", ".join(LABEL_CSV_PATTERNS)
+        raise FileNotFoundError(
+            f"No labeled CSV files matching {formatted_patterns} found in {resolved_labeling_dir}"
+        )
+
+    return [
+        LabeledDatasetSource(
+            csv_path=csv_path,
+            clip_root=resolved_labeling_dir,
+            source_name=csv_path.stem,
+        )
+        for csv_path in unique_csv_paths
+    ]
 
 
 def _validate_source_paths(source: LabeledDatasetSource) -> tuple[Path, Path | None]:
