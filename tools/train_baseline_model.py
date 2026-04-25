@@ -52,7 +52,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs.")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size.")
     parser.add_argument("--learning-rate", type=float, default=1e-3, help="Optimizer learning rate.")
-    parser.add_argument("--weight-decay", type=float, default=0.0, help="Optimizer weight decay.")
+    parser.add_argument("--weight-decay", type=float, default=0.01, help="Optimizer weight decay.")
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=10,
+        help="Stop training after this many consecutive epochs without validation F1 improvement.",
+    )
     parser.add_argument("--hidden-dim", type=int, default=16, help="Hidden layer width.")
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout for the baseline MLP.")
     parser.add_argument(
@@ -143,7 +149,7 @@ def main() -> int:
 
     model_config = ModelConfig(
         model_name="cnn_lstm_audio",
-        dropout=0.3,
+        dropout=0.5,
         lstm_hidden_dim=256,
         audio_feature_dim=7,
         unfreeze_backbone=args.unfreeze_backbone,
@@ -152,6 +158,7 @@ def main() -> int:
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         epochs=args.epochs,
+        patience=args.patience,
         random_seed=args.seed,
         device=args.device,
         positive_class_weight=positive_class_weight,
@@ -253,7 +260,8 @@ def main() -> int:
                     "learning_rate": args.learning_rate,
                     "weight_decay": args.weight_decay,
                     "lstm_hidden_dim": 256,
-                    "dropout": 0.3,
+                    "dropout": 0.5,
+                    "patience": args.patience,
                     "seed": args.seed,
                     "device": args.device,
                     "unfreeze_backbone": args.unfreeze_backbone,

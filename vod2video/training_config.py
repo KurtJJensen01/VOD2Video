@@ -57,8 +57,11 @@ class TrainingConfig:
     """Top-level training hyperparameters and runtime settings."""
 
     learning_rate: float = 1e-3
-    weight_decay: float = 0.0
+    weight_decay: float = 0.01
     epochs: int = 10
+    patience: int = 10
+    lr_scheduler_patience: int = 5
+    lr_scheduler_factor: float = 0.5
     random_seed: int = 42
     device: str = "cpu"
     decision_threshold: float = 0.5
