@@ -40,9 +40,9 @@ from vod2video.training_data import (  # noqa: E402
 )
 
 
-EPOCH_GRID = [50, 75]
-LEARNING_RATE_GRID = [0.0001, 0.00005]
-BATCH_SIZE_GRID = [4, 8]
+EPOCH_GRID = [50, 75, 100]
+LEARNING_RATE_GRID = [0.001, 0.0003, 0.0001, 0.00005]
+BATCH_SIZE_GRID = [4, 8, 16]
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "artifacts" / "hyperparameter_search_v3",
+        default=REPO_ROOT / "artifacts" / "hyperparameter_search_broad",
         help="Directory where grid-search outputs will be written.",
     )
     parser.add_argument(
