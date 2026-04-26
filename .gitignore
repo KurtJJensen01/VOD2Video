@@ -3,6 +3,8 @@ clips
 1_Jynxzi_Clips
 3_Jynxzi_Clips
 4_Burnt_Peanut_Clips
+labeling_test/*_Clips/
+*.mp4
 *.7z
 __pycache__/
 *.py[cod]
@@ -12,3 +14,6 @@ artifacts/training/
 artifacts/features/
 artifacts/inference/
 artifacts/review/
+artifacts/visualization/
+artifacts/hyperparameter_search*/
+outputs/

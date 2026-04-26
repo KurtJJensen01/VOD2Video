@@ -1,0 +1,24 @@
+{
+  "sources": [
+    {
+      "source_name": "1_Jynxzi",
+      "csv_path": "labeling_test/1_Jynxzi_Labels.csv",
+      "clip_root": "labeling_test"
+    },
+    {
+      "source_name": "2_Burnt_Peanut",
+      "csv_path": "labeling_test/2_Burnt_Peanut_Labels.csv",
+      "clip_root": "labeling_test"
+    },
+    {
+      "source_name": "3_Jynxzi",
+      "csv_path": "labeling_test/3_Jynxzi_Labels.csv",
+      "clip_root": "labeling_test"
+    },
+    {
+      "source_name": "4_Burnt_Peanut",
+      "csv_path": "labeling_test/4_Burnt_Peanut_Labels.csv",
+      "clip_root": "labeling_test"
+    }
+  ]
+}

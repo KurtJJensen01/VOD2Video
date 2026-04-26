@@ -16,9 +16,11 @@ from vod2video import (  # noqa: E402
     DatasetValidationError,
     LabeledDatasetSource,
     SplitConfig,
+    discover_labeled_dataset_sources,
     format_split_summaries,
     format_summary,
     load_labeled_dataset,
+    load_labeled_dataset_sources_from_config,
     split_labeled_dataset,
     write_split_manifests,
 )
@@ -27,6 +29,15 @@ from vod2video import (  # noqa: E402
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Load labeled VOD clips and build a repeatable train/val/test split."
+    )
+    parser.add_argument(
+        "--datasets-config",
+        type=Path,
+        default=REPO_ROOT / "datasets.json",
+        help=(
+            "Dataset source config JSON. Defaults to datasets.json when present; "
+            "auto-discovery is used if the config is missing and no explicit CSVs are provided."
+        ),
     )
     parser.add_argument(
         "--csv",
@@ -94,22 +105,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_sources_from_args(args: argparse.Namespace, repo_root: Path) -> list[LabeledDatasetSource]:
-    if not args.csv_paths and not args.clip_roots:
-        return [
-            LabeledDatasetSource(
-                csv_path=repo_root / "labeling_test" / "1_Jynxzi_Labels.csv",
-                clip_root=repo_root / "labeling_test",
-                source_name="Jynxzi",
-            ),
-            LabeledDatasetSource(
-                csv_path=repo_root / "labeling_test" / "2_Burnt_Peanut_Labels.csv",
-                clip_root=repo_root / "labeling_test",
-                source_name="Burnt_Peanut",
-            ),
-        ]
-
     csv_paths = args.csv_paths or []
     clip_roots = args.clip_roots or []
+
+    if not csv_paths and not clip_roots:
+        if args.datasets_config is not None and args.datasets_config.exists():
+            return load_labeled_dataset_sources_from_config(args.datasets_config)
+        return discover_labeled_dataset_sources(repo_root / "labeling_test")
 
     if len(csv_paths) != len(clip_roots):
         raise ValueError("You must provide the same number of --csv and --clip-root arguments.")

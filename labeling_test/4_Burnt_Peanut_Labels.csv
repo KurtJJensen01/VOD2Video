@@ -1,5 +1,5 @@
 vod_id,segment_id,clip_name,clip_path,start_time_seconds,end_time_seconds,start_time_hhmmss,end_time_hhmmss,label,notes
-4,seg_00001,seg_00001_000000_000005.mp4,4_Burnt_Peanut_4_Burnt_Peanut_Clips\seg_00001_000000_000005.mp4,0,5,0:00:00,0:00:05,1,
+4,seg_00001,seg_00001_000000_000005.mp4,4_Burnt_Peanut_Clips\seg_00001_000000_000005.mp4,0,5,0:00:00,0:00:05,1,
 4,seg_00002,seg_00002_000005_000010.mp4,4_Burnt_Peanut_Clips\seg_00002_000005_000010.mp4,5,10,0:00:05,0:00:10,1,
 4,seg_00004,seg_00004_000015_000020.mp4,4_Burnt_Peanut_Clips\seg_00004_000015_000020.mp4,15,20,0:00:15,0:00:20,1,
 4,seg_00005,seg_00005_000020_000025.mp4,4_Burnt_Peanut_Clips\seg_00005_000020_000025.mp4,20,25,0:00:20,0:00:25,1,

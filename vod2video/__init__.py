@@ -22,8 +22,10 @@ from .dataset_loader import (
     DatasetValidationError,
     LabeledDatasetSource,
     LoadedDataset,
+    discover_labeled_dataset_sources,
     format_summary,
     load_labeled_dataset,
+    load_labeled_dataset_sources_from_config,
 )
 from .dataset_split import (
     DatasetSplit,
@@ -155,6 +157,7 @@ __all__ = [
     "compute_binary_classification_metrics",
     "compute_positive_class_weight_from_dataframe",
     "compute_positive_class_weight_from_manifest",
+    "discover_labeled_dataset_sources",
     "build_review_summary_table",
     "extract_audio_features",
     "extract_clip_features",
@@ -164,6 +167,7 @@ __all__ = [
     "generate_visualization_artifacts",
     "load_baseline_summary",
     "load_labeled_dataset",
+    "load_labeled_dataset_sources_from_config",
     "load_feature_source_manifest",
     "load_feature_manifest_for_inference",
     "load_prediction_review_csv",
