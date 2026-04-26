@@ -209,6 +209,18 @@ Branch 4B experiment, run:
 python tools/select_demo_examples.py --output-dir artifacts/demo_selection/branch_4c
 ```
 
+To assemble the Branch 5B final demo example package from the Branch 4C
+selections by copying clips into per-category folders (true positives, false
+positives, false negatives, borderline) and writing a unified manifest CSV
+plus summary JSON, run:
+
+```bash
+python tools/build_final_demo_package.py --output-dir artifacts/final_demo_package/branch_5b
+```
+
+By default the build fails if any source clip cannot be located on disk. Pass
+`--allow-missing` to skip missing clips and record them in the summary instead.
+
 --- 
 
 ## Notes
