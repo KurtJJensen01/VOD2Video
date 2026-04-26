@@ -297,7 +297,7 @@ Final example-selection package for the end-user demo.
 
 ---
 
-# Phase 6 — New VOD Inference Pipeline
+# Phase 6 — New VOD Inference Pipeline — Drew
 
 ### Dependency
 Branch 5A complete
@@ -316,7 +316,7 @@ Working new-VOD pipeline that turns one raw VOD into ranked highlight candidates
 
 ---
 
-# Phase 7 — Highlight Clip Selection
+# Phase 7 — Highlight Clip Selection — Ian
 
 ### Dependency
 Phase 6 complete
