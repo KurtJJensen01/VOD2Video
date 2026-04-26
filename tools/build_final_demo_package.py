@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""CLI entry point for the Branch 5B final demo package."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from vod2video.final_demo_package import (  # noqa: E402
+    FinalDemoPackageError,
+    build_final_demo_package,
+)
+
+DEFAULT_SOURCE_DIR = REPO_ROOT / "artifacts" / "demo_selection" / "branch_4c"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts" / "final_demo_package" / "branch_5b"
+DEFAULT_CLIP_ROOT = REPO_ROOT / "labeling_test"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Assemble the Phase 5B final demo example package by copying "
+            "Branch 4C-selected clips into a category-organized folder set."
+        )
+    )
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=DEFAULT_SOURCE_DIR,
+        help="Directory containing the Branch 4C demo-selection CSVs.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="Directory where the final demo package will be written.",
+    )
+    parser.add_argument(
+        "--clip-root",
+        type=Path,
+        default=DEFAULT_CLIP_ROOT,
+        help=(
+            "Canonical clip root used to resolve relative clip_path entries "
+            "in the Branch 4C CSVs. Defaults to the repo's labeling_test dir."
+        ),
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.5,
+        help="Decision threshold used by Branch 4C. Recorded in the summary only.",
+    )
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help=(
+            "Skip clips whose source files cannot be located instead of failing "
+            "the build. Off by default so a final demo package is never silently "
+            "incomplete."
+        ),
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        manifest, summary, output_paths = build_final_demo_package(
+            source_dir=args.source_dir,
+            output_dir=args.output_dir,
+            repo_root=REPO_ROOT,
+            clip_root=args.clip_root,
+            threshold=args.threshold,
+            allow_missing=args.allow_missing,
+        )
+    except (FileNotFoundError, FinalDemoPackageError, ValueError) as exc:
+        print(f"Final demo package build failed: {exc}", file=sys.stderr)
+        return 1
+
+    print("Branch 5B final demo package complete")
+    print(f"output dir={summary.output_dir}")
+    print(f"manifest csv={output_paths['manifest_csv']}")
+    print(f"summary json={output_paths['summary_json']}")
+    print("category counts=" + json.dumps(summary.category_counts))
+    print(f"total clips copied={summary.total_clips_copied}")
+    if summary.missing_source_files:
+        print(
+            f"missing source files={len(summary.missing_source_files)} "
+            "(see summary JSON for the full list)"
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
