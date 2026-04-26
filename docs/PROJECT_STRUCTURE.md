@@ -1,6 +1,6 @@
 # Project Structure
 
-This repo is organized around one active stable pipeline and several retained experiment paths.
+This repo is organized around the active CNN+LSTM+MLP highlight-detection pipeline and several retained experiment paths.
 
 ## Root Files
 
@@ -14,15 +14,15 @@ This repo is organized around one active stable pipeline and several retained ex
 - `vod2video/`: reusable package code.
   - `dataset_loader.py`: validates and combines labeled CSV sources.
   - `dataset_split.py`: builds leakage-resistant train/val/test split manifests.
-  - `clip_features.py`: extracts visual/audio summary features for the active MLP pipeline.
-  - `models.py`: contains the active MLP model and retained experimental CNN+LSTM+audio model.
+  - `clip_features.py`: extracts visual/audio summary features and writes the manifest used by training/evaluation.
+  - `models.py`: contains the retained MLP model and the active CNN+LSTM+audio/MLP classifier model.
   - `training.py`, `training_data.py`, `training_config.py`, `checkpointing.py`: shared training utilities.
   - `evaluation.py`, `inference.py`, `metrics.py`: evaluation and scoring helpers.
   - `prediction_review.py`, `visualization.py`, `demo_selection.py`: reporting and presentation helpers.
-  - `feature_improvement.py`, `model_improvement.py`: experiment helpers, not the default pipeline.
+  - `feature_improvement.py`, `model_improvement.py`: retained experiment helpers for the feature-based MLP path.
 
 - `tools/`: runnable scripts.
-  - Active stable workflow:
+  - Active default workflow:
     - `test_dataset_split.py`
     - `extract_clip_features.py`
     - `run_real_baseline_training.py`
@@ -33,7 +33,7 @@ This repo is organized around one active stable pipeline and several retained ex
     - `test_dataset_loader.py`
     - `score_feature_manifest.py`
     - `select_demo_examples.py`
-  - Experimental scripts retained in place to avoid import breakage:
+  - Experiment scripts:
     - `train_baseline_model.py`
     - `run_feature_subset_experiments.py`
     - `run_model_improvement_experiments.py`
@@ -51,6 +51,7 @@ This repo is organized around one active stable pipeline and several retained ex
   - `review/`: prediction review outputs.
   - `visualization/`: generated charts and tables.
   - `feature_improvement/`, `model_improvement/`, `hyperparameter_search*/`: experiment outputs.
+  - `demo_selection/`, `final_demo_package/`, `phase_5a_final_metrics/`: final review/demo artifacts.
 
 - `docs/`: planning, proposal, structure, and handoff documentation.
 
@@ -58,7 +59,7 @@ This repo is organized around one active stable pipeline and several retained ex
 
 ## Active Pipeline
 
-The stable path for final-project results is:
+The default path for current project artifacts is:
 
 ```bash
 python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
@@ -66,11 +67,13 @@ python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1
 python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
 python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
 python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
+python tools/select_demo_examples.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c
+python tools/build_final_demo_package.py --source-dir artifacts/demo_selection/branch_4c --output-dir artifacts/final_demo_package/branch_5b
 ```
 
 ## Experimental Work
 
-CNN-only, CNN+LSTM, CNN+LSTM+audio, feature-subset, model-improvement, and hyperparameter-search work should be treated as experimental. The scripts and reusable code remain in their current locations because moving them would require import rewiring and could break old experiment reproduction.
+The active model code path is `cnn_lstm_audio`: a pretrained ResNet18 frame encoder, an LSTM temporal encoder, and an MLP classifier head that also receives audio summary features. The feature-subset and model-improvement scripts are retained for the earlier MLP feature-experiment path. Hyperparameter-search scripts support the CNN+LSTM+MLP path.
 
 ## Legacy Work
 
