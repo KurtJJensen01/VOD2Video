@@ -297,7 +297,7 @@ Final example-selection package for the end-user demo.
 
 ---
 
-# Phase 6 — New VOD Inference Pipeline — Drew
+# Phase 6 — New VOD Inference Pipeline — Drew/Kurt
 
 ### Dependency
 Branch 5A complete
