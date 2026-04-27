@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -322,8 +324,24 @@ def main() -> int:
         return 1
 
     features_csv = feature_paths["features_csv"]
-    print(f"  Features CSV: {features_csv}")
     print(f"  Feature columns: {len(feature_summary.feature_columns)}")
+
+    # The checkpoint was trained with three derived columns that training_data.py
+    # computes at training time but the feature extractor does not produce.
+    # Add them now to match the checkpoint's expected feature_names exactly.
+    feat_df = pd.read_csv(features_csv)
+    feat_df["duration_seconds"] = (
+        pd.to_numeric(feat_df["end_time_seconds"]) - pd.to_numeric(feat_df["start_time_seconds"])
+    )
+    feat_df["segment_index"] = pd.to_numeric(
+        feat_df["segment_id"].astype("string").str.extract(r"(\d+)$", expand=False),
+        errors="coerce",
+    )
+    vod_values = feat_df["vod_id"].astype("string").tolist()
+    unique_vods = {v: i for i, v in enumerate(dict.fromkeys(vod_values))}
+    feat_df["vod_index"] = [float(unique_vods[v]) for v in vod_values]
+    feat_df.to_csv(features_csv, index=False)
+    print(f"  Features CSV: {features_csv}  (+duration_seconds, segment_index, vod_index)")
 
     # ------------------------------------------------------------------
     # Step 3: score and rank clips
