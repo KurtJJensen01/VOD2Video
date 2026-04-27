@@ -297,16 +297,6 @@ def parse_args() -> argparse.Namespace:
             "0 disables filtering (default)."
         ),
     )
-    parser.add_argument(
-        "--min-time-distance-seconds",
-        type=float,
-        default=0.0,
-        help=(
-            "Minimum seconds between any two clips in top_highlights.csv. "
-            "Prevents the top picks from clustering in the same part of the VOD. "
-            "0 disables filtering (default)."
-        ),
-    )
     parser.add_argument("--ffmpeg-path", help="Explicit path to ffmpeg if not on PATH")
     parser.add_argument("--ffprobe-path", help="Explicit path to ffprobe if not on PATH")
     return parser.parse_args()
