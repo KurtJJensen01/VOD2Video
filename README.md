@@ -37,10 +37,10 @@ Run commands from the repo root.
 ```bash
 python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
 python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/features/branch_2a
-python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
-python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
-python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
-python tools/select_demo_examples.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c
+python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
+python tools/review_predictions.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/review/branch_3b --threshold 0.60
+python tools/generate_result_visualizations.py --training-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
+python tools/select_demo_examples.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c --threshold 0.60
 python tools/build_final_demo_package.py --source-dir artifacts/demo_selection/branch_4c --output-dir artifacts/final_demo_package/branch_5b
 ```
 
@@ -48,7 +48,7 @@ This produces the core project artifacts:
 
 - `artifacts/splits/branch_1c/`: train/val/test manifests and split summaries.
 - `artifacts/features/branch_2a/`: clip feature manifest and feature summary.
-- `artifacts/training/branch_3a_real_baseline/`: CNN+LSTM+MLP checkpoint, metrics, training history, and prediction CSVs.
+- `artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/`: final selected CNN+LSTM+MLP checkpoint, metrics, training history, and prediction CSVs.
 - `artifacts/review/branch_3b/`: ranked predictions, true/false positive tables, and review summary.
 - `artifacts/visualization/branch_3c/`: report/presentation charts and tables.
 - `artifacts/demo_selection/branch_4c/`: selected examples for demos and review.
@@ -68,10 +68,16 @@ Use this when you need the broader CNN+LSTM+MLP experiment grid. It is much slow
 python tools/run_hyperparameter_search.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/hyperparameter_search_broad
 ```
 
-Visualize one completed run by pointing at a run folder that contains `metrics.json`, `result.json`, and prediction CSVs:
+The final selected run is `e100_lr0.0003_bs8`: 100 epochs, learning rate `0.0003`, batch size `8`, and decision threshold `0.60`. Regenerate only that run with the command below instead of rerunning the full grid:
 
 ```bash
-python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search/e50_lr0.0001_bs4 --output-dir artifacts/visualization/cnn_best
+python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
+```
+
+Optionally generate report visuals for that completed run:
+
+```bash
+python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --output-dir artifacts/visualization/cnn_best
 ```
 
 ## Dataset Setup
@@ -134,7 +140,13 @@ python tools/train_baseline_model.py --split-manifest artifacts/features/branch_
 Lower-level training entry point for the same `cnn_lstm_audio` model. Useful for quick custom training runs.
 
 ```bash
-python tools/score_feature_manifest.py --checkpoint artifacts/training/branch_3a_real_baseline/best_model.pt --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/inference/branch_2c
+python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
+```
+
+Required command to regenerate the final selected CNN+LSTM+audio run without rerunning the full hyperparameter grid. This writes the final checkpoint to `artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt`.
+
+```bash
+python tools/score_feature_manifest.py --checkpoint artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt --feature-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/inference/branch_2c --threshold 0.60
 ```
 
 Scores a manifest with a saved checkpoint and writes ranked prediction outputs. Useful when you already have a checkpoint and do not need to retrain.
@@ -142,19 +154,19 @@ Scores a manifest with a saved checkpoint and writes ranked prediction outputs. 
 ### Review, visualization, and demo commands
 
 ```bash
-python tools/review_predictions.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/review/branch_3b
+python tools/review_predictions.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/review/branch_3b --threshold 0.60
 ```
 
 Ranks predictions and separates true positives, false positives, true negatives, and false negatives for model review.
 
 ```bash
-python tools/generate_result_visualizations.py --training-dir artifacts/training/branch_3a_real_baseline --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
+python tools/generate_result_visualizations.py --training-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
 ```
 
 Builds presentation-ready charts and tables from training and review artifacts.
 
 ```bash
-python tools/select_demo_examples.py --prediction-csv artifacts/training/branch_3a_real_baseline/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c
+python tools/select_demo_examples.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c --threshold 0.60
 ```
 
 Selects high-signal examples for demos: top highlights, true positives, false positives, false negatives, and borderline cases.
@@ -171,10 +183,10 @@ Copies selected clips into a category-organized final demo package and writes a 
 python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
 python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
 python tools/run_hyperparameter_search.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/hyperparameter_search_broad
-python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search/e50_lr0.0001_bs4 --output-dir artifacts/visualization/cnn_best
+python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --output-dir artifacts/visualization/cnn_best
 ```
 
-These commands support experiment comparison and presentation evidence. The feature/model improvement scripts are retained for the MLP feature-experiment path, while the hyperparameter search and CNN visualization scripts support the CNN+LSTM+MLP path.
+These commands support experiment comparison and presentation evidence. The feature/model improvement scripts are retained for the MLP feature-experiment path, while the hyperparameter search and CNN visualization scripts support the CNN+LSTM+MLP path. The visualization command is optional; the final selected training command above is the required command for regenerating the final checkpoint.
 
 ## Generated Artifacts And Git Hygiene
 

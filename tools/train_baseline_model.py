@@ -240,6 +240,39 @@ def main() -> int:
         "test": test_evaluation.to_dict(),
     }
     (output_dir / "evaluation_summary.json").write_text(json.dumps(evaluation_summary, indent=2), encoding="utf-8")
+    (output_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "batch_size": args.batch_size,
+                "weight_decay": args.weight_decay,
+                "patience": args.patience,
+                "val_f1": val_evaluation.metrics.f1,
+                "val_recall": val_evaluation.metrics.recall,
+                "val_precision": val_evaluation.metrics.precision,
+                "val_accuracy": val_evaluation.metrics.accuracy,
+                "test_f1": test_evaluation.metrics.f1,
+                "test_recall": test_evaluation.metrics.recall,
+                "test_precision": test_evaluation.metrics.precision,
+                "test_accuracy": test_evaluation.metrics.accuracy,
+                "chosen_threshold": chosen_eval_threshold,
+                "best_epoch": history["best_epoch"],
+                "status": "success",
+                "error": "",
+                "run_name": output_dir.name,
+                "output_dir": str(output_dir),
+                "best_checkpoint_path": history["best_checkpoint_path"],
+                "confusion_matrix": {
+                    "train": train_evaluation.to_dict()["confusion_matrix"],
+                    "val": val_evaluation.to_dict()["confusion_matrix"],
+                    "test": test_evaluation.to_dict()["confusion_matrix"],
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     (output_dir / "metrics_summary.json").write_text(
         json.dumps(
             {
