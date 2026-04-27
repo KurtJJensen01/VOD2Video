@@ -12,7 +12,7 @@ Output layout under --output-dir:
     feature_summary.json
   inference/
     scored_clips.csv     all clips ranked by predicted_probability
-    top_highlights.csv   top --top-k clips only
+    top_highlights.csv   predicted highlights filtered by --top-k
     inference_summary.json
   pipeline_summary.json  high-level run summary
 """
@@ -49,12 +49,11 @@ from vod2video.inference import InferenceError, score_feature_manifest  # noqa: 
 DEFAULT_CHECKPOINT = (
     REPO_ROOT
     / "artifacts"
-    / "model_improvement"
-    / "branch_4b"
-    / "runs"
-    / "lower_learning_rate"
+    / "hyperparameter_search_broad"
+    / "e100_lr0.0003_bs8"
     / "best_model.pt"
 )
+MIN_CLIP_DURATION_SECONDS = 0.01
 
 _MANIFEST_FIELDNAMES = [
     "vod_id",
@@ -151,13 +150,20 @@ def generate_clips(
 ) -> list[dict]:
     duration = _probe_duration(input_video, ffprobe)
     segment_count = math.ceil(duration / segment_length)
-    print(f"  Duration: {duration:.1f}s  Clips: {segment_count}")
+    print(f"  Duration: {duration:.1f}s")
 
     rows: list[dict] = []
     for index in range(segment_count):
         start = index * segment_length
-        end = min((index + 1) * segment_length, duration)
+        if start >= duration - MIN_CLIP_DURATION_SECONDS:
+            break
+
+        end = min(start + segment_length, duration)
         clip_duration = end - start
+        if clip_duration <= MIN_CLIP_DURATION_SECONDS:
+            break
+        if int(start) == int(end):
+            break
 
         segment_id = f"seg_{index + 1:05d}"
         clip_name = f"{segment_id}_{int(start):06d}_{int(end):06d}.mp4"
@@ -165,9 +171,6 @@ def generate_clips(
 
         if not output_clip.exists():
             _export_clip(input_video, output_clip, start, clip_duration, ffmpeg)
-
-        if (index + 1) % 200 == 0 or (index + 1) == segment_count:
-            print(f"  [{index + 1}/{segment_count}] {clip_name}")
 
         rows.append({
             "vod_id": vod_id,
@@ -186,6 +189,10 @@ def generate_clips(
             "resolved_clip_path": str(output_clip.resolve()),
         })
 
+        if len(rows) % 200 == 0:
+            print(f"  Generated {len(rows)} clips; latest: {clip_name}")
+
+    print(f"  Clips: {len(rows)}")
     return rows
 
 
@@ -223,6 +230,18 @@ def _select_diverse_top_k(predictions: pd.DataFrame, top_k: int, min_distance: f
     return pd.DataFrame(selected_rows).reset_index(drop=True)
 
 
+def _filter_predicted_highlights(predictions: pd.DataFrame, threshold: float) -> pd.DataFrame:
+    """Return ranked rows that meet the active highlight decision threshold."""
+    highlight_mask = pd.Series(False, index=predictions.index)
+    if "predicted_class" in predictions.columns:
+        predicted_class = pd.to_numeric(predictions["predicted_class"], errors="coerce").fillna(0)
+        highlight_mask = highlight_mask | (predicted_class.astype(int) == 1)
+    if "predicted_probability" in predictions.columns:
+        probabilities = pd.to_numeric(predictions["predicted_probability"], errors="coerce")
+        highlight_mask = highlight_mask | (probabilities >= float(threshold))
+    return predictions.loc[highlight_mask].copy()
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -248,7 +267,7 @@ def parse_args() -> argparse.Namespace:
         "--checkpoint",
         type=Path,
         default=DEFAULT_CHECKPOINT,
-        help="Path to model checkpoint (default: lower_learning_rate from Phase 4B)",
+        help="Path to model checkpoint (default: final Phase 5A CNN+LSTM+audio run)",
     )
     parser.add_argument(
         "--threshold",
@@ -266,14 +285,14 @@ def parse_args() -> argparse.Namespace:
         "--top-k",
         type=int,
         default=20,
-        help="Number of top-ranked clips to write to top_highlights.csv (default: 20)",
+        help="Maximum number of predicted highlights to write to top_highlights.csv (default: 20)",
     )
     parser.add_argument(
         "--min-time-distance-seconds",
         type=float,
         default=0.0,
         help=(
-            "Minimum seconds between any two clips in top_highlights.csv. "
+            "Minimum seconds between any two predicted highlights in top_highlights.csv. "
             "Prevents the top picks from clustering in the same part of the VOD. "
             "0 disables filtering (default)."
         ),
@@ -381,32 +400,6 @@ def main() -> int:
     unique_vods = {v: i for i, v in enumerate(dict.fromkeys(vod_values))}
     feat_df["vod_index"] = [float(unique_vods[v]) for v in vod_values]
 
-    # The model was trained on clips sampled from long VODs at various positions
-    # (mean segment_index ~2944, mean start_time ~14716s). A new VOD starting at
-    # position 0 produces values far outside that range, causing checkpoint
-    # normalization to push all inputs to the same extreme value and saturate every
-    # prediction at 1.0. Fix: linearly remap the positional features so they span
-    # [mean - std, mean + std] of the training distribution, preserving relative
-    # ordering within the VOD while keeping values in-distribution for the model.
-    # Stats are read from the checkpoint so this stays correct when the checkpoint
-    # is swapped out.
-    import torch as _torch
-    _ckpt = _torch.load(args.checkpoint, map_location="cpu")
-    _norm = _ckpt.get("normalization_stats") or {}
-    _means, _stds = _norm.get("means", {}), _norm.get("stds", {})
-    for _col in ("segment_index", "start_time_seconds", "end_time_seconds"):
-        if _col not in feat_df.columns or _col not in _means:
-            continue
-        _mean, _std = float(_means[_col]), float(_stds.get(_col, 1.0))
-        _raw = feat_df[_col].astype(float)
-        _lo, _hi = _raw.min(), _raw.max()
-        feat_df[_col] = (
-            _mean + ((_raw - _lo) / (_hi - _lo) - 0.5) * 2.0 * _std
-            if _hi > _lo else _mean
-        )
-    if "vod_index" in _means:
-        feat_df["vod_index"] = float(_means["vod_index"])
-
     feat_df.to_csv(features_csv, index=False)
     print(f"  Features CSV: {features_csv}  (+duration_seconds, segment_index, vod_index)")
 
@@ -433,12 +426,14 @@ def main() -> int:
     print(f"  Ranked CSV: {inf_paths['scored_csv']}")
 
     min_dist = args.min_time_distance_seconds
-    top_clips = _select_diverse_top_k(predictions, args.top_k, min_dist)
+    predicted_highlights = _filter_predicted_highlights(predictions, inf_summary.threshold)
+    top_clips = _select_diverse_top_k(predicted_highlights, args.top_k, min_dist)
     top_clips.to_csv(inf_paths["top_csv"], index=False)
+    print(f"  Predicted highlights selected: {len(top_clips)} of requested top_k={args.top_k}")
     if min_dist > 0:
-        print(f"  Top {args.top_k} CSV (min {min_dist}s apart): {inf_paths['top_csv']}")
+        print(f"  Top highlights CSV ({len(top_clips)} rows, min {min_dist}s apart): {inf_paths['top_csv']}")
     else:
-        print(f"  Top {args.top_k} CSV: {inf_paths['top_csv']}")
+        print(f"  Top highlights CSV ({len(top_clips)} rows): {inf_paths['top_csv']}")
 
     preview_cols = [
         c for c in (
@@ -447,8 +442,12 @@ def main() -> int:
         )
         if c in top_clips.columns
     ]
-    print(f"\nTop {min(args.top_k, 10)} predicted highlights:")
-    print(top_clips[preview_cols].head(10).to_string(index=False))
+    preview_count = min(len(top_clips), 10)
+    print(f"\nPredicted highlight preview ({preview_count} shown):")
+    if preview_count:
+        print(top_clips[preview_cols].head(10).to_string(index=False))
+    else:
+        print("  No clips met the active highlight threshold.")
 
     # ------------------------------------------------------------------
     # Pipeline summary
