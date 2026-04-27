@@ -185,17 +185,17 @@ produce ranked highlight candidates, run:
 ```bash
 python tools/run_vod_inference_pipeline.py \
   --input path/to/vod.mp4 \
-  --vod-id 3 \
-  --checkpoint artifacts/model_improvement/branch_4b/runs/lower_learning_rate/best_model.pt \
-  --threshold 0.5 \
+  --vod-id final_test \
+  --checkpoint artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt \
+  --threshold 0.60 \
   --top-k 20 \
   --min-time-distance-seconds 30
 ```
 
 `--threshold` overrides the value saved in the checkpoint. Omit it to use the
 checkpoint's default. `--min-time-distance-seconds` enforces a minimum gap
-between any two clips in `top_highlights.csv` so the top picks are spread
-across the VOD rather than clustering in one moment.
+between any two predicted highlights in `top_highlights.csv` so the top picks
+are spread across the VOD rather than clustering in one moment.
 
 If `ffmpeg`/`ffprobe` are not on PATH, pass explicit paths:
 
@@ -211,8 +211,8 @@ Output is written to `artifacts/inference/phase_6/` by default:
 - `clips/` — 5-second MP4 segments
 - `clip_manifest.csv` — per-clip metadata
 - `features/clip_features.csv` — extracted feature vectors
-- `inference/scored_clips.csv` — all clips ranked by predicted probability
-- `inference/top_highlights.csv` — top `--top-k` clips, time-diversity filtered
+- `inference/scored_clips.csv` — all scored clips ranked by predicted probability
+- `inference/top_highlights.csv` — up to `--top-k` clips above the active threshold, filtered by `--min-time-distance-seconds`
 - `pipeline_summary.json` — run parameters and output paths
 
 --- 
