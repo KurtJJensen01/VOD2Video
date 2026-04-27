@@ -120,11 +120,14 @@ def _export_clip(
     duration: float,
     ffmpeg: str,
 ) -> None:
+    # Scale and fps must match the training clip format (640x360, 12fps) so that
+    # extracted features land in the same distribution the model was trained on.
     result = _run([
         ffmpeg, "-y",
         "-ss", f"{start:.3f}",
         "-i", str(input_video),
         "-t", f"{duration:.3f}",
+        "-vf", "scale=640:360,fps=12",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k",
         str(output_clip),
@@ -194,6 +197,33 @@ def write_manifest(manifest_path: Path, rows: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Time-diversity filter
+# ---------------------------------------------------------------------------
+
+
+def _select_diverse_top_k(predictions: pd.DataFrame, top_k: int, min_distance: float) -> pd.DataFrame:
+    """Return up to top_k clips from ranked predictions with at least min_distance
+    seconds between any two selected clips' start times."""
+    if min_distance <= 0 or "start_time_seconds" not in predictions.columns:
+        return predictions.head(top_k).copy()
+
+    selected_rows = []
+    selected_starts: list[float] = []
+
+    for _, row in predictions.iterrows():
+        start = float(row["start_time_seconds"])
+        if all(abs(start - s) >= min_distance for s in selected_starts):
+            selected_rows.append(row)
+            selected_starts.append(start)
+        if len(selected_rows) >= top_k:
+            break
+
+    if not selected_rows:
+        return pd.DataFrame(columns=predictions.columns)
+    return pd.DataFrame(selected_rows).reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -237,6 +267,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=20,
         help="Number of top-ranked clips to write to top_highlights.csv (default: 20)",
+    )
+    parser.add_argument(
+        "--min-time-distance-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum seconds between any two clips in top_highlights.csv. "
+            "Prevents the top picks from clustering in the same part of the VOD. "
+            "0 disables filtering (default)."
+        ),
     )
     parser.add_argument("--ffmpeg-path", help="Explicit path to ffmpeg if not on PATH")
     parser.add_argument("--ffprobe-path", help="Explicit path to ffprobe if not on PATH")
@@ -340,6 +380,33 @@ def main() -> int:
     vod_values = feat_df["vod_id"].astype("string").tolist()
     unique_vods = {v: i for i, v in enumerate(dict.fromkeys(vod_values))}
     feat_df["vod_index"] = [float(unique_vods[v]) for v in vod_values]
+
+    # The model was trained on clips sampled from long VODs at various positions
+    # (mean segment_index ~2944, mean start_time ~14716s). A new VOD starting at
+    # position 0 produces values far outside that range, causing checkpoint
+    # normalization to push all inputs to the same extreme value and saturate every
+    # prediction at 1.0. Fix: linearly remap the positional features so they span
+    # [mean - std, mean + std] of the training distribution, preserving relative
+    # ordering within the VOD while keeping values in-distribution for the model.
+    # Stats are read from the checkpoint so this stays correct when the checkpoint
+    # is swapped out.
+    import torch as _torch
+    _ckpt = _torch.load(args.checkpoint, map_location="cpu")
+    _norm = _ckpt.get("normalization_stats") or {}
+    _means, _stds = _norm.get("means", {}), _norm.get("stds", {})
+    for _col in ("segment_index", "start_time_seconds", "end_time_seconds"):
+        if _col not in feat_df.columns or _col not in _means:
+            continue
+        _mean, _std = float(_means[_col]), float(_stds.get(_col, 1.0))
+        _raw = feat_df[_col].astype(float)
+        _lo, _hi = _raw.min(), _raw.max()
+        feat_df[_col] = (
+            _mean + ((_raw - _lo) / (_hi - _lo) - 0.5) * 2.0 * _std
+            if _hi > _lo else _mean
+        )
+    if "vod_index" in _means:
+        feat_df["vod_index"] = float(_means["vod_index"])
+
     feat_df.to_csv(features_csv, index=False)
     print(f"  Features CSV: {features_csv}  (+duration_seconds, segment_index, vod_index)")
 
@@ -364,17 +431,24 @@ def main() -> int:
     print(f"  Predicted highlights: {inf_summary.predicted_positive_count}")
     print(f"  Score range: [{inf_summary.score_min:.3f}, {inf_summary.score_max:.3f}]")
     print(f"  Ranked CSV: {inf_paths['scored_csv']}")
-    print(f"  Top {args.top_k} CSV: {inf_paths['top_csv']}")
+
+    min_dist = args.min_time_distance_seconds
+    top_clips = _select_diverse_top_k(predictions, args.top_k, min_dist)
+    top_clips.to_csv(inf_paths["top_csv"], index=False)
+    if min_dist > 0:
+        print(f"  Top {args.top_k} CSV (min {min_dist}s apart): {inf_paths['top_csv']}")
+    else:
+        print(f"  Top {args.top_k} CSV: {inf_paths['top_csv']}")
 
     preview_cols = [
         c for c in (
             "score_rank", "unique_id", "start_time_seconds",
             "end_time_seconds", "predicted_probability", "predicted_class",
         )
-        if c in predictions.columns
+        if c in top_clips.columns
     ]
     print(f"\nTop {min(args.top_k, 10)} predicted highlights:")
-    print(predictions[preview_cols].head(10).to_string(index=False))
+    print(top_clips[preview_cols].head(10).to_string(index=False))
 
     # ------------------------------------------------------------------
     # Pipeline summary
@@ -387,6 +461,7 @@ def main() -> int:
         "checkpoint": str(args.checkpoint),
         "predicted_highlights": inf_summary.predicted_positive_count,
         "threshold": inf_summary.threshold,
+        "min_time_distance_seconds": min_dist,
         "score_min": inf_summary.score_min,
         "score_max": inf_summary.score_max,
         "score_mean": inf_summary.score_mean,

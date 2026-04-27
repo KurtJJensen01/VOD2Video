@@ -209,6 +209,42 @@ Branch 4B experiment, run:
 python tools/select_demo_examples.py --output-dir artifacts/demo_selection/branch_4c
 ```
 
+To run the Phase 6 end-to-end inference pipeline on a new unlabeled VOD and
+produce ranked highlight candidates, run:
+
+```bash
+python tools/run_vod_inference_pipeline.py \
+  --input path/to/vod.mp4 \
+  --vod-id 3 \
+  --checkpoint artifacts/model_improvement/branch_4b/runs/lower_learning_rate/best_model.pt \
+  --threshold 0.5 \
+  --top-k 20 \
+  --min-time-distance-seconds 30
+```
+
+`--threshold` overrides the value saved in the checkpoint. Omit it to use the
+checkpoint's default. `--min-time-distance-seconds` enforces a minimum gap
+between any two clips in `top_highlights.csv` so the top picks are spread
+across the VOD rather than clustering in one moment.
+
+If `ffmpeg`/`ffprobe` are not on PATH, pass explicit paths:
+
+```bash
+python tools/run_vod_inference_pipeline.py \
+  --input path/to/vod.mp4 \
+  --vod-id 3 \
+  --ffmpeg-path C:\path\to\ffmpeg.exe \
+  --ffprobe-path C:\path\to\ffprobe.exe
+```
+
+Output is written to `artifacts/inference/phase_6/` by default:
+- `clips/` — 5-second MP4 segments
+- `clip_manifest.csv` — per-clip metadata
+- `features/clip_features.csv` — extracted feature vectors
+- `inference/scored_clips.csv` — all clips ranked by predicted probability
+- `inference/top_highlights.csv` — top `--top-k` clips, time-diversity filtered
+- `pipeline_summary.json` — run parameters and output paths
+
 --- 
 
 ## Notes
