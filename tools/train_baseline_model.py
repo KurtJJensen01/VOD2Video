@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=8, help="Number of training epochs.")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size.")
     parser.add_argument("--learning-rate", type=float, default=1e-3, help="Optimizer learning rate.")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        help="Fixed decision threshold for final train/val/test evaluation and checkpoint metadata.",
+    )
     parser.add_argument("--weight-decay", type=float, default=0.01, help="Optimizer weight decay.")
     parser.add_argument(
         "--patience",
@@ -120,6 +125,16 @@ def choose_threshold_from_val_predictions(predictions: pd.DataFrame) -> float:
     labels = torch.tensor(predictions["label"].to_numpy(dtype="float32"), dtype=torch.float32)
     threshold, _ = sweep_thresholds(torch.logit(probabilities), labels, loss=float("nan"), min_precision=0.15)
     return float(threshold)
+
+
+def update_checkpoint_threshold(checkpoint_path: Path, threshold: float) -> None:
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    training_config = checkpoint.get("training_config")
+    if not isinstance(training_config, dict):
+        training_config = {}
+    training_config["decision_threshold"] = float(threshold)
+    checkpoint["training_config"] = training_config
+    torch.save(checkpoint, checkpoint_path)
 
 
 def main() -> int:
@@ -195,7 +210,14 @@ def main() -> int:
         batch_size=args.batch_size,
         device=args.device,
     )
-    chosen_eval_threshold = choose_threshold_from_val_predictions(val_predictions)
+    chosen_eval_threshold = (
+        float(args.threshold)
+        if args.threshold is not None
+        else choose_threshold_from_val_predictions(val_predictions)
+    )
+    if args.threshold is not None:
+        update_checkpoint_threshold(Path(history["best_checkpoint_path"]), chosen_eval_threshold)
+        update_checkpoint_threshold(Path(history["latest_checkpoint_path"]), chosen_eval_threshold)
     train_evaluation, train_predictions = evaluate_checkpoint_on_manifest(
         checkpoint_path=Path(history["best_checkpoint_path"]),
         feature_manifest_path=args.split_manifest,
