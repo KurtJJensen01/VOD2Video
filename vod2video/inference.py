@@ -185,7 +185,7 @@ def prepare_feature_frame_for_inference(
     normalized = feature_frame.copy()
     for name in feature_names:
         std = float(stds[name])
-        if std == 0.0:
+        if abs(std) < 1e-10:
             std = 1.0
         normalized[name] = (feature_frame[name] - float(means[name])) / std
 
