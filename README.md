@@ -1,8 +1,8 @@
 # VOD2Video
 
-**VOD2Video** is an AI-powered VOD-to-YouTube editing project. The long-term product goal is to turn livestream recordings into condensed YouTube highlight videos by segmenting a VOD, scoring each segment for highlight quality, ranking the best moments, and using those ranked clips for review/demo packages.
+**VOD2Video** is an AI-powered VOD-to-YouTube editing project. It segments livestream recordings, scores each segment for highlight quality, ranks the best moments, and assembles selected clips into a condensed highlight video.
 
-This repository contains the machine learning, dataset, evaluation, and artifact-generation pipeline for the deep learning course project. The current working task is binary highlight detection on labeled 5-second clips.
+This repository contains the machine learning, dataset, evaluation, inference, and artifact-generation pipeline for the deep learning course project. The final model is a binary highlight detector trained on labeled 5-second clips.
 
 ## Active Default Pipeline: CNN+LSTM+MLP
 
@@ -14,92 +14,278 @@ The active default model is the **CNN+LSTM+MLP highlight classifier**:
 
 In code, this model is named `cnn_lstm_audio` because it includes audio features before the final MLP classifier. Some script and artifact names still include older words like `baseline` or `real_baseline`; treat those as legacy names. The implementation now builds the CNN+LSTM+MLP path.
 
+## Final Artifact and Dataset Download
+
+Large generated artifacts, labeled clip folders, checkpoints, VODs, and final videos are not committed to GitHub because of file size. They are provided through the final delivery SharePoint folder:
+
+https://waynestateprod-my.sharepoint.com/:f:/g/personal/hx0783_wayne_edu/IgD8hUDnkfpOSYyry_Rjyni4AeFRZ2ayrzvMPkq7HVxar2E?e=sAD1K2
+
+The shared folder contains:
+
+- `VOD2Video_Final_Delivery/` with final artifacts, checkpoint, manifests, visualizations, inference outputs, selected highlights, and final video outputs.
+- The four labeled clip folders / datasets needed by the project.
+- The final generated highlight video.
+
+Downloading this folder is the easiest way to inspect the submitted results or run later phases without rebuilding everything.
+
 ## Install
 
-Create a Python environment, install dependencies, and make sure local clip files exist under the paths referenced by `datasets.json`.
+Clone the GitHub repo first, then install Python dependencies from the repo root:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Install `ffmpeg` and `ffprobe` if you want full audio extraction. If they are missing, feature extraction can still continue with audio fallback columns, and the training dataloader will use zero audio features when audio decode is unavailable.
+Install FFmpeg and FFprobe for audio extraction, VOD segmentation, inference, and video assembly. The examples below use Windows paths:
 
-You can pass explicit tool paths when extracting features:
-
-```bash
-python tools/extract_clip_features.py --ffmpeg-path C:\path\to\ffmpeg.exe --ffprobe-path C:\path\to\ffprobe.exe
+```text
+C:\ffmpeg\bin\ffmpeg.exe
+C:\ffmpeg\bin\ffprobe.exe
 ```
 
-## Regenerate The Main Artifacts
+Use your local FFmpeg/FFprobe paths if they are installed somewhere else.
 
-Run commands from the repo root.
+## Where Downloaded Files Go
+
+After cloning the repo, copy the downloaded artifacts and datasets into the repo root. The expected structure is:
+
+```text
+VOD2Video/
+  artifacts/
+    hyperparameter_search_broad/
+      e100_lr0.0003_bs8/
+        best_model.pt
+    visualization/
+    inference/
+    highlight_selection/
+    final_video/
+  labeling_test/
+    1_Jynxzi_Labels.csv
+    2_Burnt_Peanut_Labels.csv
+    3_Jynxzi_Labels.csv
+    4_Burnt_Peanut_Labels.csv
+    [matching clip folders/files as included in the download]
+  datasets.json
+  tools/
+  vod2video/
+  README.md
+```
+
+If the download contains a folder named `VOD2Video_Final_Delivery`, open it and copy the inner `artifacts/` folder and clip/dataset folders into the repo root.
+
+Do not accidentally create `VOD2Video/VOD2Video_Final_Delivery/artifacts/...` unless you update paths manually. The commands in this README assume `artifacts/` and `labeling_test/` are directly inside the repo root.
+
+`datasets.json` expects these CSVs:
+
+- `labeling_test/1_Jynxzi_Labels.csv`
+- `labeling_test/2_Burnt_Peanut_Labels.csv`
+- `labeling_test/3_Jynxzi_Labels.csv`
+- `labeling_test/4_Burnt_Peanut_Labels.csv`
+
+The matching clip folders/files should also be under `labeling_test/`, as included in the download.
+
+## Fast Path: Use Downloaded Artifacts
+
+Use this path to inspect the final results, rerun final video assembly, or run inference/selection/video assembly with the downloaded checkpoint.
+
+1. Clone the repo.
+2. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Install FFmpeg and FFprobe.
+4. Download the final delivery folder from the SharePoint link above.
+5. Copy the downloaded `artifacts/` folder into the repo root.
+6. Copy the labeled clip folders/datasets into the paths expected by `datasets.json`.
+7. Confirm the checkpoint exists:
+
+```text
+artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt
+```
+
+8. Confirm the final video exists:
+
+```text
+artifacts/final_video/phase_8_final_demo_vod_10min_v2/final_highlight_video.mp4
+```
+
+### Rerun Phase 8 From Downloaded Phase 7 Outputs
+
+```bash
+python tools/assemble_final_video.py \
+  --selection-manifest artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2/selected_highlights_manifest.csv \
+  --selection-dir artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2 \
+  --output-dir artifacts/final_video/phase_8_rerun_from_downloaded_artifacts \
+  --output-name final_highlight_video.mp4 \
+  --order chronological \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --include-teaser \
+  --teaser-clip-count 5 \
+  --teaser-snippet-seconds 1.5 \
+  --teaser-order score \
+  --teaser-snippet-mode loudest \
+  --teaser-transition-seconds 0.5
+```
+
+### Rerun Phases 6, 7, and 8 With Downloaded Checkpoint
+
+Use a local VOD file for `--input`.
+
+Phase 6:
+
+```bash
+python tools/run_vod_inference_pipeline.py \
+  --input "path/to/vod.mp4" \
+  --vod-id final_demo_vod \
+  --output-dir artifacts/inference/phase_6_final_demo_vod \
+  --checkpoint artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt \
+  --threshold 0.60 \
+  --segment-length 5 \
+  --top-k 150 \
+  --min-time-distance-seconds 20 \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --ffprobe-path C:\ffmpeg\bin\ffprobe.exe
+```
+
+Phase 7:
+
+```bash
+python tools/select_highlight_clips.py \
+  --input artifacts/inference/phase_6_final_demo_vod/inference/scored_clips.csv \
+  --output-dir artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2 \
+  --threshold 0.35 \
+  --top-k 120 \
+  --min-gap-seconds 0
+```
+
+Phase 8:
+
+```bash
+python tools/assemble_final_video.py \
+  --selection-manifest artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2/selected_highlights_manifest.csv \
+  --selection-dir artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2 \
+  --output-dir artifacts/final_video/phase_8_final_demo_vod_10min_v2 \
+  --output-name final_highlight_video.mp4 \
+  --order chronological \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --include-teaser \
+  --teaser-clip-count 5 \
+  --teaser-snippet-seconds 1.5 \
+  --teaser-order score \
+  --teaser-snippet-mode loudest \
+  --teaser-transition-seconds 0.5
+```
+
+## Full Reproduction Path From Scratch
+
+Use this path to regenerate splits, features, the final checkpoint, visuals, inference outputs, selected clips, and the final video. This is slower than using the downloaded artifacts.
+
+Exact regenerated metrics may vary slightly depending on hardware, random seeds, dependency versions, and CUDA behavior. The downloaded final checkpoint is the source used for the report/demo.
+
+1. Clone the repo.
+2. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Install FFmpeg and FFprobe.
+4. Download the final delivery folder from the SharePoint link above.
+5. Place the labeled clip folders and CSVs where `datasets.json` expects them, directly under `labeling_test/`.
+6. Generate splits:
 
 ```bash
 python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
-python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/features/branch_2a
-python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
-python tools/review_predictions.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/review/branch_3b --threshold 0.60
-python tools/generate_result_visualizations.py --training-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
-python tools/select_demo_examples.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c --threshold 0.60
-python tools/build_final_demo_package.py --source-dir artifacts/demo_selection/branch_4c --output-dir artifacts/final_demo_package/branch_5b
 ```
 
-This produces the core project artifacts:
-
-- `artifacts/splits/branch_1c/`: train/val/test manifests and split summaries.
-- `artifacts/features/branch_2a/`: clip feature manifest and feature summary.
-- `artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/`: final selected CNN+LSTM+MLP checkpoint, metrics, training history, and prediction CSVs.
-- `artifacts/review/branch_3b/`: ranked predictions, true/false positive tables, and review summary.
-- `artifacts/visualization/branch_3c/`: report/presentation charts and tables.
-- `artifacts/demo_selection/branch_4c/`: selected examples for demos and review.
-- `artifacts/final_demo_package/branch_5b/`: copied demo clips plus `final_demo_manifest.csv` and package summary.
-
-Other generated folders may exist from previous runs:
-
-- `artifacts/phase_5a_final_metrics/`: locked final metrics package from the current academic project state.
-- `artifacts/final_demo_package/branch_5b_review_check/`: review-check demo package variant.
-- `outputs/`: older generated report/demo text outputs.
-
-## Optional Hyperparameter Search
-
-Use this when you need the broader CNN+LSTM+MLP experiment grid. It is much slower than the main artifact path because it trains many combinations.
+7. Extract features:
 
 ```bash
-python tools/run_hyperparameter_search.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/hyperparameter_search_broad
+python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/features/phase_5a_final_848_166_167
 ```
 
-The final selected run is `e100_lr0.0003_bs8`: 100 epochs, learning rate `0.0003`, batch size `8`, and decision threshold `0.60`. Regenerate only that run with the command below instead of rerunning the full grid:
+8. Regenerate the final checkpoint with the selected hyperparameters:
 
 ```bash
-python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
+python tools/train_baseline_model.py \
+  --split-manifest artifacts/splits/branch_1c/all_splits.csv \
+  --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 \
+  --epochs 100 \
+  --learning-rate 0.0003 \
+  --batch-size 8 \
+  --threshold 0.60 \
+  --weight-decay 0.0001 \
+  --patience 15 \
+  --monitor-metric f1
 ```
 
-Optionally generate report visuals for that completed run:
+9. Generate Phase 5A visuals:
 
 ```bash
-python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --output-dir artifacts/visualization/cnn_best
+python tools/review_predictions.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/review/phase_5a_final_e100_lr0.0003_bs8 --threshold 0.60
+python tools/generate_result_visualizations.py --training-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --review-dir artifacts/review/phase_5a_final_e100_lr0.0003_bs8 --output-dir artifacts/visualization/phase_5a_final_e100_lr0.0003_bs8 --split test
 ```
 
-## Dataset Setup
+10. Run Phase 6 on a VOD:
 
-Dataset sources are listed in root-level `datasets.json`. Each source has:
+```bash
+python tools/run_vod_inference_pipeline.py \
+  --input "path/to/vod.mp4" \
+  --vod-id final_demo_vod \
+  --output-dir artifacts/inference/phase_6_final_demo_vod \
+  --checkpoint artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt \
+  --threshold 0.60 \
+  --segment-length 5 \
+  --top-k 150 \
+  --min-time-distance-seconds 20 \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --ffprobe-path C:\ffmpeg\bin\ffprobe.exe
+```
 
-- `source_name`
-- `csv_path`
-- `clip_root`
+11. Run Phase 7 highlight selection:
 
-The current labeled CSVs live in `labeling_test/`:
+```bash
+python tools/select_highlight_clips.py \
+  --input artifacts/inference/phase_6_final_demo_vod/inference/scored_clips.csv \
+  --output-dir artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2 \
+  --threshold 0.35 \
+  --top-k 120 \
+  --min-gap-seconds 0
+```
 
-- `1_Jynxzi_Labels.csv`
-- `2_Burnt_Peanut_Labels.csv`
-- `3_Jynxzi_Labels.csv`
-- `4_Burnt_Peanut_Labels.csv`
+12. Run Phase 8 final video assembly:
 
-The matching clip folders are local data and should not be committed. `tools/test_dataset_split.py` uses `datasets.json` by default, falls back to auto-discovering `*_Labels.csv` under `labeling_test/`, and also supports repeated `--csv` / `--clip-root` arguments.
+```bash
+python tools/assemble_final_video.py \
+  --selection-manifest artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2/selected_highlights_manifest.csv \
+  --selection-dir artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2 \
+  --output-dir artifacts/final_video/phase_8_final_demo_vod_10min_v2 \
+  --output-name final_highlight_video.mp4 \
+  --order chronological \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --include-teaser \
+  --teaser-clip-count 5 \
+  --teaser-snippet-seconds 1.5 \
+  --teaser-order score \
+  --teaser-snippet-mode loudest \
+  --teaser-transition-seconds 0.5
+```
+
+## Artifact Verification Checklist
+
+After copying downloaded files, these paths should exist:
+
+- `artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt`
+- `artifacts/visualization/phase_5a_final_e100_lr0.0003_bs8/test_confusion_matrix.png`
+- `artifacts/inference/phase_6_final_demo_vod/inference/scored_clips.csv`
+- `artifacts/highlight_selection/phase_7_final_demo_vod_10min_v2/selected_highlights_manifest.csv`
+- `artifacts/final_video/phase_8_final_demo_vod_10min_v2/final_highlight_video.mp4`
 
 ## Command Reference
 
-### Dataset and feature commands
+### Dataset Commands
 
 ```bash
 python tools/build_labeling_dataset.py --input path\to\vod.mp4 --output-dir labeling_test\new_source --segment-length 5
@@ -120,24 +306,12 @@ python tools/test_dataset_split.py --write-dir artifacts/splits/branch_1c
 Builds repeatable train/val/test splits while keeping nearby clips in the same split block to reduce leakage.
 
 ```bash
-python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/features/branch_2a
+python tools/extract_clip_features.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/features/phase_5a_final_848_166_167
 ```
 
 Creates the training feature manifest. The default CNN+LSTM+MLP path uses this manifest for labels, splits, resolved clip paths, and audio-related inputs.
 
-### Training and scoring commands
-
-```bash
-python tools/run_real_baseline_training.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/branch_3a_real_baseline
-```
-
-Trains the current CNN+LSTM+MLP implementation and writes checkpoints, metrics, and train/val/test predictions. The folder name is legacy.
-
-```bash
-python tools/train_baseline_model.py --split-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/training/cnn_lstm_audio
-```
-
-Lower-level training entry point for the same `cnn_lstm_audio` model. Useful for quick custom training runs.
+### Training and Scoring Commands
 
 ```bash
 python tools/train_baseline_model.py --split-manifest artifacts/splits/branch_1c/all_splits.csv --output-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --epochs 100 --learning-rate 0.0003 --batch-size 8 --threshold 0.60 --weight-decay 0.0001 --patience 15 --monitor-metric f1
@@ -151,151 +325,28 @@ python tools/score_feature_manifest.py --checkpoint artifacts/hyperparameter_sea
 
 Scores a manifest with a saved checkpoint and writes ranked prediction outputs. Useful when you already have a checkpoint and do not need to retrain.
 
-### Review, visualization, and demo commands
+### Phase 6, 7, and 8 Commands
 
-```bash
-python tools/review_predictions.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/review/branch_3b --threshold 0.60
-```
+Phase 6 runs inference on a new unlabeled VOD and writes segmented clips, features, scored clips, top highlights, and a pipeline summary.
 
-Ranks predictions and separates true positives, false positives, true negatives, and false negatives for model review.
+Phase 7 reads Phase 6 `scored_clips.csv`, applies threshold/top-k/min-gap selection, and packages selected clips for Phase 8.
 
-```bash
-python tools/generate_result_visualizations.py --training-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --review-dir artifacts/review/branch_3b --output-dir artifacts/visualization/branch_3c --split test
-```
+Phase 8 reads the selected clip package from Phase 7 and merges those clips into one condensed highlight MP4. With `--include-teaser`, the final video starts with short snippets from the best selected clips, then a separator, then the full highlight video.
 
-Builds presentation-ready charts and tables from training and review artifacts.
+Use the exact Phase 6/7/8 commands in the fast path or full reproduction path above for final delivery outputs.
 
-```bash
-python tools/select_demo_examples.py --prediction-csv artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/test_predictions.csv --output-dir artifacts/demo_selection/branch_4c --threshold 0.60
-```
+## Git Hygiene
 
-Selects high-signal examples for demos: top highlights, true positives, false positives, false negatives, and borderline cases.
+Generated outputs are intentionally provided through the SharePoint download folder. Do not commit:
 
-```bash
-python tools/build_final_demo_package.py --source-dir artifacts/demo_selection/branch_4c --output-dir artifacts/final_demo_package/branch_5b
-```
+- `artifacts/`
+- `vods/`
+- Generated clips/videos
+- `.pt` checkpoints
+- `.7z` archives
+- Bulk generated manifests, charts, or output packages
 
-Copies selected clips into a category-organized final demo package and writes a manifest/summary.
-
-### Experiment commands
-
-```bash
-python tools/run_feature_subset_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/feature_improvement/branch_4a
-python tools/run_model_improvement_experiments.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/model_improvement/branch_4b
-python tools/run_hyperparameter_search.py --feature-manifest artifacts/features/branch_2a/clip_features.csv --output-dir artifacts/hyperparameter_search_broad
-python tools/visualize_cnn_run.py --run-dir artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8 --output-dir artifacts/visualization/cnn_best
-```
-
-These commands support experiment comparison and presentation evidence. The feature/model improvement scripts are retained for the MLP feature-experiment path, while the hyperparameter search and CNN visualization scripts support the CNN+LSTM+MLP path. The visualization command is optional; the final selected training command above is the required command for regenerating the final checkpoint.
-
-## Generated Artifacts And Git Hygiene
-
-Generated outputs go under `artifacts/` and are ignored by git. Do not commit video clips, `.7z` clip archives, checkpoints, generated manifests, generated charts, or bulk generated outputs.
-To run the Phase 6 end-to-end inference pipeline on a new unlabeled VOD and
-produce ranked highlight candidates, run:
-
-```bash
-python tools/run_vod_inference_pipeline.py \
-  --input path/to/vod.mp4 \
-  --vod-id final_test \
-  --checkpoint artifacts/hyperparameter_search_broad/e100_lr0.0003_bs8/best_model.pt \
-  --threshold 0.60 \
-  --top-k 20 \
-  --min-time-distance-seconds 30
-```
-
-`--threshold` overrides the value saved in the checkpoint. Omit it to use the
-checkpoint's default. `--min-time-distance-seconds` enforces a minimum gap
-between any two predicted highlights in `top_highlights.csv` so the top picks
-are spread across the VOD rather than clustering in one moment.
-
-If `ffmpeg`/`ffprobe` are not on PATH, pass explicit paths:
-
-```bash
-python tools/run_vod_inference_pipeline.py \
-  --input path/to/vod.mp4 \
-  --vod-id 3 \
-  --ffmpeg-path C:\path\to\ffmpeg.exe \
-  --ffprobe-path C:\path\to\ffprobe.exe
-```
-
-Output is written to `artifacts/inference/phase_6/` by default:
-- `clips/` — 5-second MP4 segments
-- `clip_manifest.csv` — per-clip metadata
-- `features/clip_features.csv` — extracted feature vectors
-- `inference/scored_clips.csv` — all scored clips ranked by predicted probability
-- `inference/top_highlights.csv` — up to `--top-k` clips above the active threshold, filtered by `--min-time-distance-seconds`
-- `pipeline_summary.json` — run parameters and output paths
-
-### Phase 7 highlight selection
-
-Phase 7 reads Phase 6 `scored_clips.csv`, applies the final selected threshold,
-top-k cap, and minimum-gap redundancy filter, then packages the selected clips
-for Phase 8 video assembly.
-
-```bash
-python tools/select_highlight_clips.py \
-  --input artifacts/inference/phase_6/inference/scored_clips.csv \
-  --output-dir artifacts/highlight_selection/phase_7 \
-  --threshold 0.60 \
-  --top-k 20 \
-  --min-gap-seconds 30
-```
-
-Expected outputs:
-- `artifacts/highlight_selection/phase_7/selected_clips/`
-- `artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv`
-- `artifacts/highlight_selection/phase_7/selection_summary.json`
-
-### Phase 8 final video assembly
-
-Phase 8 reads the selected clip package from Phase 7 and merges those clips into
-one condensed highlight MP4. It does not run inference, apply thresholds, or
-select clips. Without `--include-teaser`, Phase 8 behaves like the simple
-assembler and writes the full highlight video directly.
-
-```bash
-python tools/assemble_final_video.py \
-  --selection-manifest artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv \
-  --selection-dir artifacts/highlight_selection/phase_7 \
-  --output-dir artifacts/final_video/phase_8 \
-  --output-name final_highlight_video.mp4 \
-  --order chronological \
-  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe
-```
-
-Expected outputs:
-- `artifacts/final_video/phase_8/final_highlight_video.mp4`
-- `artifacts/final_video/phase_8/assembly_manifest.csv`
-- `artifacts/final_video/phase_8/assembly_summary.json`
-- `artifacts/final_video/phase_8/concat_list.txt`
-
-Optionally add a short teaser intro before the full highlight video:
-
-```bash
-python tools/assemble_final_video.py \
-  --selection-manifest artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv \
-  --selection-dir artifacts/highlight_selection/phase_7 \
-  --output-dir artifacts/final_video/phase_8 \
-  --output-name final_highlight_video.mp4 \
-  --order chronological \
-  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
-  --include-teaser \
-  --teaser-clip-count 3 \
-  --teaser-snippet-seconds 1.0 \
-  --teaser-order score \
-  --teaser-snippet-mode loudest \
-  --teaser-transition-seconds 0.5
-```
-
-With `--include-teaser`, the final video starts with short snippets from the
-best selected clips, then a black separator, then the full highlight video.
-`--teaser-snippet-mode loudest` uses the loudest part of each selected clip
-when possible and falls back to the middle if audio analysis fails.
-
---- 
-
-Small source files such as `datasets.json`, labeled CSVs, code, docs, and requirements should remain version controlled. Treat `outputs/` as generated material too.
+Small source files such as `datasets.json`, labeled CSV schemas, code, docs, and requirements should remain version controlled.
 
 ## Project Docs
 
