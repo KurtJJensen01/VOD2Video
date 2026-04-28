@@ -18,7 +18,7 @@ from vod2video.highlight_selection import (  # noqa: E402
 )
 
 DEFAULT_INPUT_CSV = (
-    REPO_ROOT / "artifacts" / "inference" / "phase_6" / "inference" / "predictions.csv"
+    REPO_ROOT / "artifacts" / "inference" / "phase_6" / "inference" / "scored_clips.csv"
 )
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts" / "highlight_selection" / "phase_7"
 
@@ -26,7 +26,7 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "artifacts" / "highlight_selection" / "phase_7"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Phase 7 highlight clip selection. Reads Phase 6's ranked predictions "
+            "Phase 7 highlight clip selection. Reads Phase 6's scored clips "
             "and produces a curated set of clips ready for Phase 8 video assembly."
         )
     )
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
         "--input",
         type=Path,
         default=DEFAULT_INPUT_CSV,
-        help="Phase 6 ranked-prediction CSV.",
+        help="Phase 6 scored-clips CSV.",
     )
     parser.add_argument(
         "--output-dir",
@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.5,
+        default=0.60,
         help="Probability threshold; clips below this are dropped.",
     )
     parser.add_argument(
