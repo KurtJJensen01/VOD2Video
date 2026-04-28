@@ -332,7 +332,7 @@ Final selected highlight clip package for video assembly.
 
 ---
 
-# Phase 8 — Final Video Assembly
+# Phase 8 — Final Video Assembly — Kurt
 
 ### Dependency
 Phase 7 complete
