@@ -18,7 +18,7 @@ In code, this model is named `cnn_lstm_audio` because it includes audio features
 
 Large generated artifacts, labeled clip folders, checkpoints, VODs, and final videos are not committed to GitHub because of file size. They are provided through the final delivery SharePoint folder:
 
-https://waynestateprod-my.sharepoint.com/:f:/g/personal/hx0783_wayne_edu/IgD8hUDnkfpOSYyry_Rjyni4AeFRZ2ayrzvMPkq7HVxar2E?e=sAD1K2
+[https://waynestateprod-my.sharepoint.com/:f:/g/personal/hx0783_wayne_edu/IgD8hUDnkfpOSYyry_Rjyni4AeFRZ2ayrzvMPkq7HVxar2E?e=sAD1K2](https://waynestateprod-my.sharepoint.com/:u:/g/personal/hx0783_wayne_edu/IQCCFxiU1GWdSYnFoxxLOqTaAdOAZPA2GCjKE_EiKdCxWOQ?e=0vqKId)
 
 The shared folder contains:
 
