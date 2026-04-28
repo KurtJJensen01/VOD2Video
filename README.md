@@ -250,8 +250,9 @@ Expected outputs:
 ### Phase 8 final video assembly
 
 Phase 8 reads the selected clip package from Phase 7 and merges those clips into
-one condensed highlight MP4. It does not generate teasers, run inference, apply
-thresholds, or select clips.
+one condensed highlight MP4. It does not run inference, apply thresholds, or
+select clips. Without `--include-teaser`, Phase 8 behaves like the simple
+assembler and writes the full highlight video directly.
 
 ```bash
 python tools/assemble_final_video.py \
@@ -268,6 +269,29 @@ Expected outputs:
 - `artifacts/final_video/phase_8/assembly_manifest.csv`
 - `artifacts/final_video/phase_8/assembly_summary.json`
 - `artifacts/final_video/phase_8/concat_list.txt`
+
+Optionally add a short teaser intro before the full highlight video:
+
+```bash
+python tools/assemble_final_video.py \
+  --selection-manifest artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv \
+  --selection-dir artifacts/highlight_selection/phase_7 \
+  --output-dir artifacts/final_video/phase_8 \
+  --output-name final_highlight_video.mp4 \
+  --order chronological \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe \
+  --include-teaser \
+  --teaser-clip-count 3 \
+  --teaser-snippet-seconds 1.0 \
+  --teaser-order score \
+  --teaser-snippet-mode loudest \
+  --teaser-transition-seconds 0.5
+```
+
+With `--include-teaser`, the final video starts with short snippets from the
+best selected clips, then a black separator, then the full highlight video.
+`--teaser-snippet-mode loudest` uses the loudest part of each selected clip
+when possible and falls back to the middle if audio analysis fails.
 
 --- 
 

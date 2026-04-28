@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import wave
 
 import pandas as pd
 
@@ -58,6 +59,8 @@ class FinalVideoAssemblySummary:
     total_source_duration_seconds: float | None
     concat_list: str
     assembly_manifest: str
+    include_teaser: bool
+    teaser_summary: str | None
     notes: list[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -80,6 +83,16 @@ def _resolve_ffmpeg(ffmpeg_path: Path | None) -> str:
     raise FileNotFoundError(
         "ffmpeg not found. Install ffmpeg, add it to PATH, or pass --ffmpeg-path."
     )
+
+
+def _resolve_ffprobe(ffmpeg_executable: str) -> str | None:
+    ffmpeg_path = Path(ffmpeg_executable)
+    sibling_names = ["ffprobe.exe", "ffprobe"]
+    for sibling_name in sibling_names:
+        ffprobe_path = ffmpeg_path.with_name(sibling_name)
+        if ffprobe_path.exists():
+            return str(ffprobe_path)
+    return shutil.which("ffprobe")
 
 
 def _resolve_clip_path(packaged_clip_path: object, selection_dir: Path) -> Path:
@@ -156,12 +169,453 @@ def _stderr_tail(result: subprocess.CompletedProcess[str], max_chars: int = 2000
     return stderr[-max_chars:]
 
 
+def _probe_duration_seconds(
+    clip_path: Path,
+    ffmpeg_executable: str,
+    fallback_duration: float | None,
+) -> float:
+    ffprobe_executable = _resolve_ffprobe(ffmpeg_executable)
+    if ffprobe_executable:
+        result = subprocess.run(
+            [
+                ffprobe_executable,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(clip_path),
+            ],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0:
+            try:
+                duration = float(result.stdout.strip())
+                if duration > 0:
+                    return duration
+            except ValueError:
+                pass
+    if fallback_duration is not None and fallback_duration > 0:
+        return fallback_duration
+    raise FinalVideoAssemblyError(f"Could not determine clip duration: {clip_path}")
+
+
+def _has_audio_stream(clip_path: Path, ffmpeg_executable: str) -> bool:
+    ffprobe_executable = _resolve_ffprobe(ffmpeg_executable)
+    if ffprobe_executable is None:
+        return True
+    result = subprocess.run(
+        [
+            ffprobe_executable,
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            str(clip_path),
+        ],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 def _total_source_duration_seconds(manifest: pd.DataFrame) -> float | None:
     starts = pd.to_numeric(manifest["start_time_seconds"], errors="coerce")
     ends = pd.to_numeric(manifest["end_time_seconds"], errors="coerce")
     if starts.isna().any() or ends.isna().any():
         return None
     return float((ends - starts).sum())
+
+
+def _select_teaser_rows(
+    manifest: pd.DataFrame,
+    teaser_clip_count: int,
+    teaser_order: str,
+) -> pd.DataFrame:
+    count = max(int(teaser_clip_count), 0)
+    if count <= 0:
+        raise FinalVideoAssemblyError("--teaser-clip-count must be greater than 0.")
+
+    if teaser_order == "score" and "predicted_probability" in manifest.columns:
+        scores = pd.to_numeric(manifest["predicted_probability"], errors="coerce")
+        if not scores.isna().all():
+            candidates = manifest.copy()
+            candidates["_teaser_score"] = scores.fillna(float("-inf"))
+            return (
+                candidates.sort_values(
+                    by=["_teaser_score"], ascending=False, kind="mergesort"
+                )
+                .drop(columns=["_teaser_score"])
+                .head(count)
+                .reset_index(drop=True)
+            )
+
+    if "selection_rank" not in manifest.columns:
+        raise FinalVideoAssemblyError(
+            "Teaser ordering needs predicted_probability or selection_rank."
+        )
+    ranks = pd.to_numeric(manifest["selection_rank"], errors="coerce")
+    if ranks.isna().any():
+        raise FinalVideoAssemblyError("selection_rank must be numeric for teaser order.")
+    candidates = manifest.copy()
+    candidates["_teaser_selection_rank"] = ranks
+    return (
+        candidates.sort_values(by=["_teaser_selection_rank"], kind="mergesort")
+        .drop(columns=["_teaser_selection_rank"])
+        .head(count)
+        .reset_index(drop=True)
+    )
+
+
+def _middle_start_seconds(duration_seconds: float, snippet_seconds: float) -> float:
+    return max((duration_seconds - snippet_seconds) / 2.0, 0.0)
+
+
+def _extract_audio_wav(
+    *,
+    ffmpeg_executable: str,
+    clip_path: Path,
+    wav_path: Path,
+) -> bool:
+    result = _run_ffmpeg(
+        [
+            ffmpeg_executable,
+            "-y",
+            "-i",
+            str(clip_path),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "wav",
+            str(wav_path),
+        ]
+    )
+    return result.returncode == 0 and wav_path.exists()
+
+
+def _find_loudest_start_seconds(
+    *,
+    wav_path: Path,
+    clip_duration_seconds: float,
+    snippet_seconds: float,
+) -> float:
+    with wave.open(str(wav_path), "rb") as wav_file:
+        sample_rate = wav_file.getframerate()
+        sample_width = wav_file.getsampwidth()
+        frame_count = wav_file.getnframes()
+        if sample_width != 2 or sample_rate <= 0 or frame_count <= 0:
+            raise FinalVideoAssemblyError("Unsupported extracted WAV format.")
+        raw = wav_file.readframes(frame_count)
+
+    samples = [
+        int.from_bytes(raw[i : i + 2], byteorder="little", signed=True)
+        for i in range(0, len(raw), 2)
+    ]
+    window_size = max(int(sample_rate * snippet_seconds), 1)
+    if len(samples) <= window_size:
+        return 0.0
+
+    step = max(int(sample_rate * 0.10), 1)
+    best_start = 0
+    best_energy = 0
+    for start in range(0, len(samples) - window_size + 1, step):
+        window = samples[start : start + window_size]
+        energy = sum(sample * sample for sample in window)
+        if energy > best_energy:
+            best_energy = energy
+            best_start = start
+
+    if best_energy <= 0:
+        raise FinalVideoAssemblyError("Audio is silent.")
+    return min(best_start / sample_rate, max(clip_duration_seconds - snippet_seconds, 0.0))
+
+
+def _extract_standardized_clip(
+    *,
+    ffmpeg_executable: str,
+    input_path: Path,
+    output_path: Path,
+    start_seconds: float | None,
+    duration_seconds: float | None,
+) -> subprocess.CompletedProcess[str]:
+    command = [ffmpeg_executable, "-y"]
+    if start_seconds is not None:
+        command.extend(["-ss", f"{start_seconds:.3f}"])
+    command.extend(["-i", str(input_path)])
+    has_audio = _has_audio_stream(input_path, ffmpeg_executable)
+    if not has_audio:
+        command.extend(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=44100",
+            ]
+        )
+    if duration_seconds is not None:
+        command.extend(["-t", f"{duration_seconds:.3f}"])
+    command.extend(["-map", "0:v:0"])
+    if has_audio:
+        command.extend(["-map", "0:a:0?"])
+    else:
+        command.extend(["-map", "1:a:0"])
+    command.extend(
+        [
+            "-vf",
+            "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,fps=30",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-shortest",
+            str(output_path),
+        ]
+    )
+    return _run_ffmpeg(command)
+
+
+def _generate_black_separator(
+    *,
+    ffmpeg_executable: str,
+    output_path: Path,
+    duration_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    return _run_ffmpeg(
+        [
+            ffmpeg_executable,
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=640x360:r=30",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-t",
+            f"{duration_seconds:.3f}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+            str(output_path),
+        ]
+    )
+
+
+def _concat_reencoded(
+    *,
+    ffmpeg_executable: str,
+    concat_list_path: Path,
+    output_path: Path,
+) -> subprocess.CompletedProcess[str]:
+    return _run_ffmpeg(
+        [
+            ffmpeg_executable,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list_path),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-c:a",
+            "aac",
+            "-pix_fmt",
+            "yuv420p",
+            str(output_path),
+        ]
+    )
+
+
+def _build_teaser_intro(
+    *,
+    manifest: pd.DataFrame,
+    resolved_clip_paths: list[Path],
+    ffmpeg_executable: str,
+    output_dir: Path,
+    main_video_path: Path,
+    final_output_path: Path,
+    teaser_clip_count: int,
+    teaser_snippet_seconds: float,
+    teaser_order: str,
+    teaser_snippet_mode: str,
+    teaser_transition_seconds: float,
+) -> dict[str, object]:
+    if teaser_snippet_seconds <= 0:
+        raise FinalVideoAssemblyError("--teaser-snippet-seconds must be greater than 0.")
+    if teaser_transition_seconds < 0:
+        raise FinalVideoAssemblyError("--teaser-transition-seconds cannot be negative.")
+
+    teaser_dir = output_dir / "teaser_clips"
+    teaser_dir.mkdir(parents=True, exist_ok=True)
+    manifest_with_paths = manifest.copy()
+    manifest_with_paths["_resolved_clip_path"] = [str(path) for path in resolved_clip_paths]
+    teaser_rows = _select_teaser_rows(
+        manifest_with_paths,
+        teaser_clip_count=teaser_clip_count,
+        teaser_order=teaser_order,
+    )
+
+    teaser_outputs: list[Path] = []
+    clip_summaries: list[dict[str, object]] = []
+    for teaser_index, row in enumerate(teaser_rows.to_dict(orient="records"), start=1):
+        clip_path = Path(str(row["_resolved_clip_path"]))
+        fallback_duration = None
+        try:
+            fallback_duration = float(row["end_time_seconds"]) - float(row["start_time_seconds"])
+        except (KeyError, TypeError, ValueError):
+            fallback_duration = None
+        clip_duration = _probe_duration_seconds(
+            clip_path, ffmpeg_executable, fallback_duration=fallback_duration
+        )
+        snippet_duration = min(float(teaser_snippet_seconds), clip_duration)
+        mode_used = teaser_snippet_mode
+        note = ""
+        snippet_start = _middle_start_seconds(clip_duration, snippet_duration)
+        if teaser_snippet_mode == "loudest":
+            wav_path = teaser_dir / f"teaser_{teaser_index:02d}_audio.wav"
+            try:
+                if not _extract_audio_wav(
+                    ffmpeg_executable=ffmpeg_executable,
+                    clip_path=clip_path,
+                    wav_path=wav_path,
+                ):
+                    raise FinalVideoAssemblyError("audio extraction failed")
+                snippet_start = _find_loudest_start_seconds(
+                    wav_path=wav_path,
+                    clip_duration_seconds=clip_duration,
+                    snippet_seconds=snippet_duration,
+                )
+            except Exception as exc:
+                mode_used = "middle"
+                note = f"loudest detection failed; used middle ({exc})"
+                snippet_start = _middle_start_seconds(clip_duration, snippet_duration)
+
+        snippet_path = teaser_dir / f"teaser_{teaser_index:02d}.mp4"
+        result = _extract_standardized_clip(
+            ffmpeg_executable=ffmpeg_executable,
+            input_path=clip_path,
+            output_path=snippet_path,
+            start_seconds=snippet_start,
+            duration_seconds=snippet_duration,
+        )
+        if result.returncode != 0 or not snippet_path.exists():
+            raise FinalVideoAssemblyError(
+                "ffmpeg failed while extracting teaser snippet. "
+                f"stderr tail: {_stderr_tail(result)}"
+            )
+        teaser_outputs.append(snippet_path)
+        clip_summaries.append(
+            {
+                "teaser_order": teaser_index,
+                "source_clip": str(clip_path),
+                "unique_id": row.get("unique_id"),
+                "selection_rank": row.get("selection_rank"),
+                "predicted_probability": row.get("predicted_probability"),
+                "snippet_start_seconds": snippet_start,
+                "snippet_duration_seconds": snippet_duration,
+                "snippet_mode_requested": teaser_snippet_mode,
+                "snippet_mode_used": mode_used,
+                "output_clip": str(snippet_path),
+                "note": note,
+            }
+        )
+
+    separator_path = output_dir / "teaser_separator.mp4"
+    separator_result = _generate_black_separator(
+        ffmpeg_executable=ffmpeg_executable,
+        output_path=separator_path,
+        duration_seconds=float(teaser_transition_seconds),
+    )
+    if separator_result.returncode != 0 or not separator_path.exists():
+        raise FinalVideoAssemblyError(
+            "ffmpeg failed while generating teaser separator. "
+            f"stderr tail: {_stderr_tail(separator_result)}"
+        )
+
+    standardized_main_path = output_dir / "main_highlight_video_standardized.mp4"
+    standardize_result = _extract_standardized_clip(
+        ffmpeg_executable=ffmpeg_executable,
+        input_path=main_video_path,
+        output_path=standardized_main_path,
+        start_seconds=None,
+        duration_seconds=None,
+    )
+    if standardize_result.returncode != 0 or not standardized_main_path.exists():
+        raise FinalVideoAssemblyError(
+            "ffmpeg failed while standardizing the main highlight video. "
+            f"stderr tail: {_stderr_tail(standardize_result)}"
+        )
+
+    teaser_concat_list_path = output_dir / "teaser_concat_list.txt"
+    _write_concat_list(
+        [*teaser_outputs, separator_path, standardized_main_path],
+        teaser_concat_list_path,
+    )
+    final_result = _concat_reencoded(
+        ffmpeg_executable=ffmpeg_executable,
+        concat_list_path=teaser_concat_list_path,
+        output_path=final_output_path,
+    )
+    if final_result.returncode != 0 or not final_output_path.exists():
+        raise FinalVideoAssemblyError(
+            "ffmpeg failed while combining teaser and main video. "
+            f"stderr tail: {_stderr_tail(final_result)}"
+        )
+
+    teaser_summary_path = output_dir / "teaser_summary.json"
+    teaser_summary: dict[str, object] = {
+        "include_teaser": True,
+        "teaser_clip_count_requested": int(teaser_clip_count),
+        "teaser_clip_count_used": len(teaser_outputs),
+        "teaser_snippet_seconds": float(teaser_snippet_seconds),
+        "teaser_order": teaser_order,
+        "teaser_snippet_mode": teaser_snippet_mode,
+        "teaser_transition_seconds": float(teaser_transition_seconds),
+        "teaser_clips_dir": str(teaser_dir),
+        "teaser_concat_list": str(teaser_concat_list_path),
+        "separator_clip": str(separator_path),
+        "main_highlight_video": str(main_video_path),
+        "standardized_main_highlight_video": str(standardized_main_path),
+        "final_output_video": str(final_output_path),
+        "clips": clip_summaries,
+    }
+    teaser_summary_path.write_text(
+        json.dumps(teaser_summary, indent=2, default=str), encoding="utf-8"
+    )
+    teaser_summary["teaser_summary"] = str(teaser_summary_path)
+    return teaser_summary
 
 
 def assemble_final_video(
@@ -173,6 +627,12 @@ def assemble_final_video(
     order: str,
     ffmpeg_path: Path | None = None,
     reencode: bool = False,
+    include_teaser: bool = False,
+    teaser_clip_count: int = 3,
+    teaser_snippet_seconds: float = 1.0,
+    teaser_order: str = "score",
+    teaser_snippet_mode: str = "loudest",
+    teaser_transition_seconds: float = 0.5,
 ) -> tuple[pd.DataFrame, FinalVideoAssemblySummary, dict[str, Path]]:
     """Assemble Phase 7 selected clips into one Phase 8 highlight video."""
 
@@ -212,6 +672,9 @@ def assemble_final_video(
 
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
     output_video = resolved_output_dir / output_name
+    main_output_video = (
+        resolved_output_dir / "main_highlight_video.mp4" if include_teaser else output_video
+    )
     concat_list_path = resolved_output_dir / "concat_list.txt"
     assembly_manifest_path = resolved_output_dir / "assembly_manifest.csv"
     assembly_summary_path = resolved_output_dir / "assembly_summary.json"
@@ -239,7 +702,7 @@ def assemble_final_video(
         str(concat_list_path),
         "-c",
         "copy",
-        str(output_video),
+        str(main_output_video),
     ]
     reencode_command = [
         ffmpeg_executable,
@@ -256,7 +719,7 @@ def assemble_final_video(
         "aac",
         "-pix_fmt",
         "yuv420p",
-        str(output_video),
+        str(main_output_video),
     ]
 
     notes: list[str] = []
@@ -282,9 +745,25 @@ def assemble_final_video(
             "ffmpeg failed while assembling the final video. "
             f"stderr tail: {_stderr_tail(final_result)}"
         )
-    if not output_video.exists():
+    if not main_output_video.exists():
         raise FinalVideoAssemblyError(
-            f"ffmpeg completed but output video was not created: {output_video}"
+            f"ffmpeg completed but output video was not created: {main_output_video}"
+        )
+
+    teaser_summary: dict[str, object] | None = None
+    if include_teaser:
+        teaser_summary = _build_teaser_intro(
+            manifest=assembly_manifest,
+            resolved_clip_paths=resolved_clip_paths,
+            ffmpeg_executable=ffmpeg_executable,
+            output_dir=resolved_output_dir,
+            main_video_path=main_output_video,
+            final_output_path=output_video,
+            teaser_clip_count=teaser_clip_count,
+            teaser_snippet_seconds=teaser_snippet_seconds,
+            teaser_order=teaser_order,
+            teaser_snippet_mode=teaser_snippet_mode,
+            teaser_transition_seconds=teaser_transition_seconds,
         )
 
     summary = FinalVideoAssemblySummary(
@@ -304,6 +783,10 @@ def assemble_final_video(
         total_source_duration_seconds=_total_source_duration_seconds(assembly_manifest),
         concat_list=str(concat_list_path),
         assembly_manifest=str(assembly_manifest_path),
+        include_teaser=bool(include_teaser),
+        teaser_summary=(
+            str(teaser_summary["teaser_summary"]) if teaser_summary is not None else None
+        ),
         notes=notes,
     )
     assembly_summary_path.write_text(
@@ -316,4 +799,7 @@ def assemble_final_video(
         "assembly_summary_json": assembly_summary_path,
         "concat_list": concat_list_path,
     }
+    if teaser_summary is not None:
+        output_paths["teaser_summary_json"] = Path(str(teaser_summary["teaser_summary"]))
+        output_paths["main_highlight_video"] = main_output_video
     return assembly_manifest, summary, output_paths
