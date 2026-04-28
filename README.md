@@ -227,6 +227,26 @@ Output is written to `artifacts/inference/phase_6/` by default:
 - `inference/top_highlights.csv` — up to `--top-k` clips above the active threshold, filtered by `--min-time-distance-seconds`
 - `pipeline_summary.json` — run parameters and output paths
 
+### Phase 7 highlight selection
+
+Phase 7 reads Phase 6 `scored_clips.csv`, applies the final selected threshold,
+top-k cap, and minimum-gap redundancy filter, then packages the selected clips
+for Phase 8 video assembly.
+
+```bash
+python tools/select_highlight_clips.py \
+  --input artifacts/inference/phase_6/inference/scored_clips.csv \
+  --output-dir artifacts/highlight_selection/phase_7 \
+  --threshold 0.60 \
+  --top-k 20 \
+  --min-gap-seconds 30
+```
+
+Expected outputs:
+- `artifacts/highlight_selection/phase_7/selected_clips/`
+- `artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv`
+- `artifacts/highlight_selection/phase_7/selection_summary.json`
+
 --- 
 
 Small source files such as `datasets.json`, labeled CSVs, code, docs, and requirements should remain version controlled. Treat `outputs/` as generated material too.
