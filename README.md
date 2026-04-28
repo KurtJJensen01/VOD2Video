@@ -247,6 +247,28 @@ Expected outputs:
 - `artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv`
 - `artifacts/highlight_selection/phase_7/selection_summary.json`
 
+### Phase 8 final video assembly
+
+Phase 8 reads the selected clip package from Phase 7 and merges those clips into
+one condensed highlight MP4. It does not generate teasers, run inference, apply
+thresholds, or select clips.
+
+```bash
+python tools/assemble_final_video.py \
+  --selection-manifest artifacts/highlight_selection/phase_7/selected_highlights_manifest.csv \
+  --selection-dir artifacts/highlight_selection/phase_7 \
+  --output-dir artifacts/final_video/phase_8 \
+  --output-name final_highlight_video.mp4 \
+  --order chronological \
+  --ffmpeg-path C:\ffmpeg\bin\ffmpeg.exe
+```
+
+Expected outputs:
+- `artifacts/final_video/phase_8/final_highlight_video.mp4`
+- `artifacts/final_video/phase_8/assembly_manifest.csv`
+- `artifacts/final_video/phase_8/assembly_summary.json`
+- `artifacts/final_video/phase_8/concat_list.txt`
+
 --- 
 
 Small source files such as `datasets.json`, labeled CSVs, code, docs, and requirements should remain version controlled. Treat `outputs/` as generated material too.
